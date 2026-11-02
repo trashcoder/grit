@@ -888,19 +888,37 @@ impl GritApp {
                 self.diff_panel(ui)
             });
         if let (Some(path), Some(repo)) = (self.selected_file.clone(), self.repo()) {
-            let hunks = unstaged_hunks(&repo, &path);
-            if !hunks.is_empty() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Stage hunk:").small().color(MUTED));
-                    for (index, (old_start, new_start, _, _)) in hunks.iter().enumerate() {
-                        if ui
-                            .small_button(format!("−{old_start} / +{new_start}"))
-                            .clicked()
-                        {
-                            self.stage_hunk(&path, index);
-                        }
+            let is_new = repo
+                .status_file(Path::new(&path))
+                .is_ok_and(|status| status.contains(Status::WT_NEW));
+            if is_new {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Untracked file:").small().color(MUTED));
+                    if ui
+                        .add_enabled(self.operation.is_none(), egui::Button::new("Stage file"))
+                        .clicked()
+                    {
+                        self.stage(&path, false);
                     }
                 });
+            } else {
+                let hunks = unstaged_hunks(&repo, &path);
+                if !hunks.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Stage hunk:").small().color(MUTED));
+                        for (index, (old_start, new_start, _, _)) in hunks.iter().enumerate() {
+                            if ui
+                                .add_enabled(
+                                    self.operation.is_none(),
+                                    egui::Button::new(format!("−{old_start} / +{new_start}")),
+                                )
+                                .clicked()
+                            {
+                                self.stage_hunk(&path, index);
+                            }
+                        }
+                    });
+                }
             }
         }
         ui.add_space(10.);
