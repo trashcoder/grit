@@ -508,7 +508,13 @@ impl GritApp {
                 }
                 return;
             } else {
-                i.add_path(Path::new(p))
+                if r.status_file(Path::new(p))
+                    .is_ok_and(|status| status.contains(Status::WT_DELETED))
+                {
+                    i.remove_path(Path::new(p))
+                } else {
+                    i.add_path(Path::new(p))
+                }
             };
             match result.and_then(|_| i.write()) {
                 Ok(()) => {
