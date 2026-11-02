@@ -47,6 +47,10 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    diff_preferences: diff_preferences::DiffPreferences,
+    display_diff: String,
+    display_diff_error: Option<String>,
+    display_diff_key: Option<(String, u32, bool)>,
     integrations: integration_features::IntegrationTools,
     history_options: history_features::HistoryOptions,
     focus_mode: bool,
@@ -178,6 +182,7 @@ impl GritApp {
     }
     fn reset_repo_selection(&mut self) {
         self.selected_commit = None;
+        self.display_diff_key = None;
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -419,6 +424,7 @@ impl GritApp {
     fn refresh(&mut self) {
         let Some(mut repo) = self.repo() else { return };
         self.history_options.query_cache = None;
+        self.display_diff_key = None;
         self.branch = repo
             .head()
             .ok()
@@ -752,7 +758,69 @@ impl GritApp {
             Err(error) => self.notice = format!("Could not prepare patch: {error}"),
         }
     }
+    fn ensure_display_diff(&mut self) {
+        let matches = self
+            .display_diff_key
+            .as_ref()
+            .is_some_and(|(raw, context, whitespace)| {
+                raw == &self.diff
+                    && *context == self.diff_preferences.context_lines
+                    && *whitespace == self.diff_preferences.ignore_whitespace
+            });
+        if matches {
+            return;
+        }
+        self.selected_diff_lines.clear();
+        self.load_large_diff = false;
+        let rendered = if self.diff_preferences == Default::default() {
+            Ok(self.diff.clone())
+        } else if let Some(repo) = self.repo() {
+            if self.tab == 1
+                && let Some(id) = self.selected_commit.as_deref()
+            {
+                diff_preferences::render_commit_diff(
+                    &repo,
+                    id,
+                    self.selected_commit_file.as_deref(),
+                    &self.diff_preferences,
+                )
+            } else if self.tab == 0
+                && let Some(path) = self.selected_file.as_deref()
+            {
+                diff_preferences::render_worktree_diff(
+                    &repo,
+                    path,
+                    self.selected_staged,
+                    &self.diff_preferences,
+                )
+            } else {
+                Ok(self.diff.clone())
+            }
+        } else {
+            Ok(self.diff.clone())
+        };
+        match rendered {
+            Ok(patch) => {
+                self.display_diff = patch;
+                self.display_diff_error = None;
+            }
+            Err(error) => {
+                self.display_diff.clear();
+                self.display_diff_error = Some(error);
+            }
+        }
+        self.display_diff_key = Some((
+            self.diff.clone(),
+            self.diff_preferences.context_lines,
+            self.diff_preferences.ignore_whitespace,
+        ));
+    }
     fn apply_selected_lines(&mut self) {
+        if self.diff_preferences.ignore_whitespace {
+            self.notice = "Show whitespace before staging individual lines".into();
+            return;
+        }
+
         let Some(path) = self.selected_file.clone() else {
             return;
         };
@@ -765,8 +833,9 @@ impl GritApp {
             self.notice = "File changed since preview; select lines again".into();
             return;
         }
+        self.ensure_display_diff();
         match diff_features::selected_patch(
-            &self.diff,
+            &self.display_diff,
             &self.selected_diff_lines,
             self.selected_staged,
         ) {
@@ -2802,6 +2871,14 @@ impl eframe::App for GritApp {
             "commit_author_email",
             self.commit_options.author_email.clone(),
         );
+        storage.set_string(
+            "diff_context",
+            self.diff_preferences.context_lines.to_string(),
+        );
+        storage.set_string(
+            "diff_ignore_whitespace",
+            self.diff_preferences.ignore_whitespace.to_string(),
+        );
         storage.set_string("commit_signoff", self.commit_options.signoff.to_string());
         for (key, value) in [
             ("history_first_parent", self.history_options.first_parent),
@@ -3035,6 +3112,7 @@ impl eframe::App for GritApp {
 }
 mod commit_features;
 mod diff_features;
+mod diff_preferences;
 mod file_features;
 mod history_features;
 mod integration_features;
@@ -3111,6 +3189,13 @@ fn main() -> eframe::Result<()> {
                 app.commit_options.author_email = storage
                     .get_string("commit_author_email")
                     .unwrap_or_default();
+                app.diff_preferences.context_lines = storage
+                    .get_string("diff_context")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(3)
+                    .min(50);
+                app.diff_preferences.ignore_whitespace =
+                    storage.get_string("diff_ignore_whitespace").as_deref() == Some("true");
                 app.commit_options.signoff =
                     storage.get_string("commit_signoff").as_deref() == Some("true");
                 for (key, target) in [

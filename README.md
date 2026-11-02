@@ -18,7 +18,7 @@ The detailed comparison against GittyUp, source references, implementation packa
 
 New workflows include selecting changed diff lines for stage/unstage (`S` / `U`), starring commits with their context menu, and structured history queries such as `author:"Alex Morgan" after:2026-01-01 path:src/main.rs`. The History **View** menu contains first-parent, stars, sorting, and column options. Commit templates and author/sign-off settings are available under the commit editor's **More** menu.
 
-**Repository tools** provides branch rename/merge, annotated tags, submodule updates, and literal or pattern-based ignore entries. **LFS / external tools** provides explicit repository-local Git LFS actions when `git-lfs` is installed, an external editor, a terminal, and the file manager. File history and byte-exact version exports are available from file actions. `Ctrl/Cmd+M` focuses the active history/diff pane; `Ctrl/Cmd+Q` closes the app. Commit stars, templates and display preferences survive restarts.
+**Repository tools** provides branch rename/merge, annotated tags, submodule updates, and literal or pattern-based ignore entries. **LFS / external tools** provides explicit repository-local Git LFS actions when `git-lfs` is installed, an external editor, a terminal, and the file manager. File history and byte-exact version exports are available from file actions. `Ctrl/Cmd+M` focuses the active history/diff pane; `Ctrl/Cmd+Q` closes the app. Commit stars, templates and display preferences survive restarts. Diff controls offer 0–50 context lines and whitespace filtering. Line staging uses the displayed context, and is disabled while whitespace changes are hidden; file staging continues to include every change.
 
 ## Features
 

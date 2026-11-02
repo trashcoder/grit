@@ -283,9 +283,28 @@ impl GritApp {
     }
 
     pub(super) fn diff_panel(&mut self, ui: &mut egui::Ui, max_height: f32) {
-        let interactive = self.tab == 0 && self.operation.is_none();
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut self.wrap_diff, "Wrap lines");
+            self.diff_preferences_ui(ui);
+        });
+        self.ensure_display_diff();
+        if let Some(error) = &self.display_diff_error {
+            ui.colored_label(Color32::LIGHT_RED, error);
+            return;
+        }
+        let interactive =
+            self.tab == 0 && self.operation.is_none() && !self.diff_preferences.ignore_whitespace;
+        if self.tab == 0 && self.diff_preferences.ignore_whitespace {
+            ui.label(
+                RichText::new(
+                    "Show whitespace to select individual lines. File staging remains available.",
+                )
+                .small()
+                .color(MUTED),
+            );
+        }
         let selectable = if interactive {
-            diff_features::selectable_lines(&self.diff)
+            diff_features::selectable_lines(&self.display_diff)
         } else {
             HashSet::new()
         };
@@ -332,11 +351,8 @@ impl GritApp {
                 self.apply_selected_lines();
             }
         }
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.wrap_diff, "Wrap lines");
-        });
         if !self.load_large_diff
-            && (self.diff.len() > 1024 * 1024 || self.diff.lines().count() > 10000)
+            && (self.display_diff.len() > 1024 * 1024 || self.display_diff.lines().count() > 10000)
         {
             ui.label("This is a large diff. Load it explicitly to review its text.");
             if ui.button("Load full diff").clicked() {
@@ -344,7 +360,7 @@ impl GritApp {
             }
             return;
         }
-        let patch = self.diff.clone();
+        let patch = self.display_diff.clone();
         egui::ScrollArea::both()
             .id_salt("diff_content")
             .auto_shrink([false, false])

@@ -201,3 +201,13 @@ Auf Benutzerwunsch erhält jedes fertig geprüfte Feature einen eigenen Commit. 
 - UI-Prüfungen in isoliertem Test-Repository: einzelne Zeile Stage/Unstage (Indexinhalt und Worktree-Prüfsumme), strukturierte Suche, Sterne über Neustart, Vorlagen über Neustart, First-parent, Fokusmodus, Dateiversionen und Ansichten bei 980 × 680.
 - Eine zunächst doppelt verwendete ScrollArea-ID im Dateiverlauf wurde nach Sichtprüfung korrigiert.
 - Zwischenstand-AppImage wird aus diesem integrierten Stand gebaut; offene Funktionsgruppen sind weiterhin oben dokumentiert.
+
+## Zweite Implementierungsrunde
+
+### Diff-Kontext und Whitespace-Anzeige
+
+Luna-Paket `diff_preferences`: Kontextumfang 0–50 Zeilen und Whitespace-Ignorieren für Arbeitsbaum-, Index- und Commit-Diffs. Die Anzeige wird getrennt vom unveränderten Rohpatch gecacht; ein Wechsel der Anzeigeoptionen verwirft alte Zeilenmarkierungen. Bei ausgeblendetem Whitespace ist Einzelzeilen-Staging deaktiviert, während Datei-Staging weiterhin alle tatsächlichen Änderungen übernimmt. Kontextänderungen allein lassen selektives Stage/Unstage zu. Präferenzen werden gespeichert.
+
+Abnahme: 45 Tests insgesamt grün; zusätzlicher Index-Test stagt eine Addition bei Kontext 0 und bestätigt unveränderte Arbeitsdatei sowie erhaltene übrige Änderungen. Git-Vergleiche prüfen Whitespace-only, gemischte Änderungen, staged und historische Diffs. Clippy ist sauber.
+
+Weitere geplante Pakete dieser Runde: hierarchische Dateiansicht und strukturiertes interaktives Blame.

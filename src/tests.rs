@@ -288,3 +288,66 @@ fn literal_filename_diff_and_editable_patch_keep_origins() {
     assert!(!patch_has_changes("diff --git a/x b/x\n--- a/x\n+++ b/x\n"));
     assert!(!diff_file_side(&repo, "a[b].txt", false).contains("unrelated"));
 }
+
+#[test]
+fn display_diff_preferences_keep_raw_patch_and_stage_selected_zero_context() {
+    let dir = TestRepo::new();
+    let repo = dir.open();
+    commit_file(&repo, "notes.txt", "one\ntwo\nthree\nfour\n", "base");
+    std::fs::write(dir.0.join("notes.txt"), "one\nTWO\nthree\nFOUR\n").unwrap();
+    let mut app = GritApp::default();
+    app.open(dir.0.clone());
+    app.tab = 0;
+    app.selected_staged = false;
+    app.select_file("notes.txt".into());
+    let raw = app.diff.clone();
+    app.diff_preferences.context_lines = 0;
+    app.ensure_display_diff();
+    assert_eq!(app.diff, raw);
+    assert_ne!(app.display_diff, raw);
+    let selected = app
+        .display_diff
+        .lines()
+        .position(|line| line == "+TWO")
+        .unwrap();
+    app.selected_diff_lines.insert(selected);
+    app.apply_selected_lines();
+    let (_, receiver) = app.operation.take().expect("Index operation started");
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap()
+        .unwrap();
+    let mut index = repo.index().unwrap();
+    index.read(true).unwrap();
+    let entry = index.get_path(Path::new("notes.txt"), 0).unwrap();
+    assert_eq!(
+        repo.find_blob(entry.id).unwrap().content(),
+        b"one\ntwo\nTWO\nthree\nfour\n"
+    );
+    assert_eq!(
+        std::fs::read(dir.0.join("notes.txt")).unwrap(),
+        b"one\nTWO\nthree\nFOUR\n"
+    );
+}
+
+#[test]
+fn whitespace_display_is_read_only_and_disables_line_staging() {
+    let dir = TestRepo::new();
+    let repo = dir.open();
+    commit_file(&repo, "notes.txt", "alpha  beta\n", "base");
+    std::fs::write(dir.0.join("notes.txt"), "alpha beta\n").unwrap();
+    let mut app = GritApp::default();
+    app.open(dir.0.clone());
+    app.tab = 0;
+    app.select_file("notes.txt".into());
+    let raw = app.diff.clone();
+    app.diff_preferences.ignore_whitespace = true;
+    app.ensure_display_diff();
+    assert_eq!(app.diff, raw);
+    assert!(!app.display_diff.contains("+alpha beta"));
+    app.selected_diff_lines.insert(7);
+    app.apply_selected_lines();
+    assert!(app.operation.is_none());
+    assert!(app.notice.contains("Show whitespace"));
+    assert!(statuses(&repo).iter().all(|c| !c.staged));
+}
