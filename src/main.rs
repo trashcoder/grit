@@ -4,8 +4,9 @@ use eframe::egui::{self, Align, Color32, FontId, Layout, RichText, Stroke};
 use git2::{BranchType, Repository, Status, StatusOptions};
 use std::{
     collections::HashMap,
+    io::Write,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::mpsc::{self, Receiver},
 };
 
@@ -69,6 +70,7 @@ struct GritApp {
     aux_output: String,
     pending_discard: Option<String>,
     conflict_draft: Option<(String, String)>,
+    patch_draft: Option<(String, String)>,
 }
 impl GritApp {
     fn repo(&self) -> Option<Repository> {
@@ -135,6 +137,7 @@ impl GritApp {
         self.diff.clear();
         self.aux_output.clear();
         self.conflict_draft = None;
+        self.patch_draft = None;
     }
     fn close_repo_tab(&mut self, path: &Path) {
         if self.operation.is_some() {
@@ -493,6 +496,61 @@ impl GritApp {
         };
         self.selected_file = Some(path.to_owned());
         self.conflict_draft = Some((path.to_owned(), content));
+    }
+    fn edit_stage_patch(&mut self, path: &str) {
+        let Some(repo) = self.repo() else { return };
+        match unstaged_patch(&repo, path) {
+            Ok(patch) if !patch.is_empty() => {
+                self.selected_file = Some(path.to_owned());
+                self.patch_draft = Some((path.to_owned(), patch));
+            }
+            Ok(_) => self.notice = "No unstaged changes for this file".into(),
+            Err(error) => self.notice = format!("Could not prepare patch: {error}"),
+        }
+    }
+    fn apply_stage_patch(&mut self, patch: &str) {
+        if self.operation.is_some() {
+            return;
+        }
+        if patch.trim().is_empty() {
+            self.notice = "The patch is empty".into();
+            return;
+        }
+        let Some(root) = self.path.clone() else {
+            return;
+        };
+        let patch = patch.to_owned();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = (|| {
+                let mut child = Command::new("git")
+                    .arg("-C")
+                    .arg(root)
+                    .args(["apply", "--cached", "--recount", "--unidiff-zero", "-"])
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .map_err(|error| error.to_string())?;
+                child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| "Could not open Git input".to_owned())?
+                    .write_all(patch.as_bytes())
+                    .map_err(|error| error.to_string())?;
+                let output = child
+                    .wait_with_output()
+                    .map_err(|error| error.to_string())?;
+                if output.status.success() {
+                    Ok(String::new())
+                } else {
+                    Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+                }
+            })();
+            let _ = tx.send(result);
+        });
+        self.notice = "Stage edited patch in progress…".into();
+        self.operation = Some(("Stage edited patch".into(), rx));
     }
     fn commit(&mut self) {
         let msg = self.message.trim().to_owned();
@@ -1108,6 +1166,15 @@ impl GritApp {
                 let hunks = unstaged_hunks(&repo, &path);
                 if !hunks.is_empty() {
                     ui.horizontal_wrapped(|ui| {
+                        if ui
+                            .add_enabled(
+                                self.operation.is_none(),
+                                egui::Button::new("Edit patch to stage selected lines"),
+                            )
+                            .clicked()
+                        {
+                            self.edit_stage_patch(&path);
+                        }
                         ui.label(RichText::new("Stage hunk:").small().color(MUTED));
                         for (index, (old_start, new_start, _, _)) in hunks.iter().enumerate() {
                             if ui
@@ -1123,6 +1190,55 @@ impl GritApp {
                     });
                 }
             }
+        }
+        let mut apply_patch = None;
+        let mut cancel_patch = false;
+        if let Some((path, patch)) = &mut self.patch_draft {
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(8.)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("Partial staging · {path}"))
+                                .strong()
+                                .color(TEXT),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    self.operation.is_none(),
+                                    egui::Button::new("Stage edited patch"),
+                                )
+                                .clicked()
+                            {
+                                apply_patch = Some(patch.clone());
+                            }
+                            if ui.button("Cancel").clicked() {
+                                cancel_patch = true;
+                            }
+                        });
+                    });
+                    ui.label(
+                        RichText::new("Remove the + or − lines you do not want staged, then apply the remaining patch.")
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.add(
+                        egui::TextEdit::multiline(patch)
+                            .code_editor()
+                            .desired_rows(12)
+                            .desired_width(f32::INFINITY),
+                    );
+                });
+        }
+        if cancel_patch {
+            self.patch_draft = None;
+        }
+        if let Some(patch) = apply_patch {
+            self.apply_stage_patch(&patch);
         }
         ui.add_space(10.);
         egui::Frame::new()
@@ -1924,6 +2040,23 @@ fn diff_file(r: &Repository, path: &str) -> String {
     }
     out
 }
+fn unstaged_patch(repo: &Repository, path: &str) -> Result<String, String> {
+    let mut options = git2::DiffOptions::new();
+    options.pathspec(path).context_lines(3);
+    let diff = repo
+        .diff_index_to_workdir(None, Some(&mut options))
+        .map_err(|error| error.message().to_owned())?;
+    let mut patch = String::new();
+    diff.print(git2::DiffFormat::Patch, |_, _, line| {
+        patch.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+        true
+    })
+    .map_err(|error| error.message().to_owned())?;
+    if patch.len() > 4 * 1024 * 1024 {
+        return Err("Patch is larger than the 4 MB editor limit".into());
+    }
+    Ok(patch)
+}
 fn unstaged_hunks(repo: &Repository, path: &str) -> Vec<(u32, u32, u32, u32)> {
     let mut options = git2::DiffOptions::new();
     options
@@ -2023,6 +2156,11 @@ impl eframe::App for GritApp {
                     } else {
                         output
                     };
+                    self.refresh();
+                }
+                Ok(_) if label == "Stage edited patch" => {
+                    self.patch_draft = None;
+                    self.notice = "Selected patch staged".into();
                     self.refresh();
                 }
                 Ok(output) => {
