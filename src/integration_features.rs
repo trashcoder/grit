@@ -1,5 +1,5 @@
 use super::*;
-#[cfg(test)]
+#[cfg(unix)]
 use std::fs;
 use std::{
     ffi::{OsStr, OsString},
@@ -155,25 +155,92 @@ fn platform_file_manager(root: &Path) -> Command {
     }
 }
 
-fn platform_terminal(root: &Path) -> Command {
+fn platform_terminal(root: &Path) -> Result<Command, String> {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         let mut c = Command::new("cmd.exe");
         c.current_dir(root);
-        c
+        c.creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+        Ok(c)
     }
     #[cfg(target_os = "macos")]
     {
         let mut c = Command::new("open");
         c.args(["-a", "Terminal"]).arg(root);
-        c
+        Ok(c)
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let mut c = Command::new("x-terminal-emulator");
-        c.current_dir(root);
-        c
+        let candidates = [
+            "x-terminal-emulator",
+            "konsole",
+            "kgx",
+            "gnome-terminal",
+            "kitty",
+            "alacritty",
+            "xterm",
+        ];
+        let Some(name) = first_available_terminal(candidates, executable_in_path) else {
+            return Err("No supported terminal was found (x-terminal-emulator, konsole, kgx, gnome-terminal, kitty, alacritty, xterm).".into());
+        };
+        let executable = find_executable(name)
+            .ok_or_else(|| format!("Terminal executable not found: {name}"))?;
+        Ok(linux_terminal_command(&executable, name, root))
     }
+}
+
+fn first_available_terminal<'a>(
+    candidates: impl IntoIterator<Item = &'a str>,
+    mut available: impl FnMut(&str) -> bool,
+) -> Option<&'a str> {
+    candidates.into_iter().find(|name| available(name))
+}
+
+#[cfg(unix)]
+fn find_executable(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|directory| directory.join(name))
+        .find(|candidate| executable_file(candidate))
+}
+
+#[cfg(unix)]
+fn executable_in_path(name: &str) -> bool {
+    find_executable(name).is_some()
+}
+
+#[cfg(unix)]
+fn executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.is_file()
+        && fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(unix)]
+fn linux_terminal_command(executable: &Path, name: &str, root: &Path) -> Command {
+    let mut command = Command::new(executable);
+    command.current_dir(root);
+    match name {
+        "konsole" => {
+            command.arg("--workdir").arg(root);
+        }
+        "kgx" => {
+            command.arg(format!("--working-directory={}", root.display()));
+        }
+        "gnome-terminal" => {
+            command.arg(format!("--working-directory={}", root.display()));
+        }
+        "kitty" => {
+            command.arg("--directory").arg(root);
+        }
+        "alacritty" => {
+            command.arg("--working-directory").arg(root);
+        }
+        // x-terminal-emulator and xterm inherit the working directory from the child process.
+        _ => {}
+    }
+    command
 }
 
 fn editor_arguments(root: &Path, relative: &str) -> Result<Vec<OsString>, String> {
@@ -360,7 +427,10 @@ impl GritApp {
                     .add_enabled(!busy, egui::Button::new("Open repository terminal"))
                     .clicked()
                 {
-                    spawn_external(platform_terminal(&root), &mut self.notice, "terminal");
+                    match platform_terminal(&root) {
+                        Ok(command) => spawn_external(command, &mut self.notice, "terminal"),
+                        Err(error) => self.notice = error,
+                    }
                 }
             });
             ui.label("External editor executable");
@@ -424,6 +494,29 @@ mod tests {
             ["lfs", "untrack", "--", "-pattern"]
         );
         assert!(lfs_track_args("a\nb").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_terminal_selects_first_available_candidate_and_sets_working_directory() {
+        let candidates = ["x-terminal-emulator", "konsole", "kgx", "gnome-terminal"];
+        let chosen = first_available_terminal(candidates, |name| name == "konsole");
+        assert_eq!(chosen, Some("konsole"));
+        let root = Path::new("/tmp/repo path");
+        let command = linux_terminal_command(Path::new("/usr/bin/konsole"), "konsole", root);
+        assert_eq!(command.get_program(), OsStr::new("/usr/bin/konsole"));
+        assert_eq!(command.get_current_dir(), Some(root));
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            [OsStr::new("--workdir"), root.as_os_str()]
+        );
+        let gnome =
+            linux_terminal_command(Path::new("/usr/bin/gnome-terminal"), "gnome-terminal", root);
+        assert_eq!(
+            gnome.get_args().next(),
+            Some(OsStr::new("--working-directory=/tmp/repo path"))
+        );
+        assert_eq!(first_available_terminal(candidates, |_| false), None);
     }
 
     #[test]
