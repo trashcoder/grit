@@ -1269,6 +1269,12 @@ impl GritApp {
         });
         ui.add_space(6.);
         if let Some(repo) = self.repo() {
+            let is_rebase = matches!(
+                repo.state(),
+                git2::RepositoryState::Rebase
+                    | git2::RepositoryState::RebaseInteractive
+                    | git2::RepositoryState::RebaseMerge
+            );
             let mut conflicts = Vec::new();
             if let Ok(index) = repo.index()
                 && let Ok(entries) = index.conflicts()
@@ -1292,7 +1298,11 @@ impl GritApp {
                     .inner_margin(8.)
                     .show(ui, |ui| {
                         ui.label(
-                            RichText::new(format!("Merge conflicts · {}", conflicts.len()))
+                            RichText::new(format!(
+                                "{} conflicts · {}",
+                                if is_rebase { "Rebase" } else { "Merge" },
+                                conflicts.len()
+                            ))
                                 .strong()
                                 .color(Color32::from_rgb(255, 195, 128)),
                         );
@@ -1321,8 +1331,17 @@ impl GritApp {
                                     if ui
                                         .add_enabled(
                                             self.operation.is_none(),
-                                            egui::Button::new("Their version"),
+                                            egui::Button::new(if is_rebase {
+                                                "Replayed commit"
+                                            } else {
+                                                "Their version"
+                                            }),
                                         )
+                                        .on_hover_text(if is_rebase {
+                                            "Use the version from the commit being replayed (--theirs)"
+                                        } else {
+                                            "Use the version from the other branch (--theirs)"
+                                        })
                                         .clicked()
                                     {
                                         self.resolve_conflict(&path, Some("--theirs"));
@@ -1330,8 +1349,17 @@ impl GritApp {
                                     if ui
                                         .add_enabled(
                                             self.operation.is_none(),
-                                            egui::Button::new("Our version"),
+                                            egui::Button::new(if is_rebase {
+                                                "Upstream version"
+                                            } else {
+                                                "Our version"
+                                            }),
                                         )
+                                        .on_hover_text(if is_rebase {
+                                            "Use the version from the branch being rebased onto (--ours)"
+                                        } else {
+                                            "Use the version from the current branch (--ours)"
+                                        })
                                         .clicked()
                                     {
                                         self.resolve_conflict(&path, Some("--ours"));
