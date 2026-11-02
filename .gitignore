@@ -1,2 +1,6 @@
-/target
+/target/
+/dist/
+*.AppImage
 *.log
+.DS_Store
+Thumbs.db
