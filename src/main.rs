@@ -78,6 +78,9 @@ impl GritApp {
         self.recent_repos.truncate(8);
     }
     fn open(&mut self, p: PathBuf) {
+        if self.operation.is_some() {
+            return;
+        }
         match Repository::open(&p) {
             Ok(r) => {
                 self.path = Some(r.workdir().unwrap_or(&p).to_path_buf());
@@ -91,6 +94,9 @@ impl GritApp {
         }
     }
     fn init_repository(&mut self, p: PathBuf) {
+        if self.operation.is_some() {
+            return;
+        }
         match Repository::init(&p) {
             Ok(repo) => {
                 self.path = Some(repo.workdir().unwrap_or(&p).to_path_buf());
@@ -249,6 +255,9 @@ impl GritApp {
         };
     }
     fn stage(&mut self, p: &str, unstage: bool) {
+        if self.operation.is_some() {
+            return;
+        }
         if let Some(r) = self.repo()
             && let Ok(mut i) = r.index()
         {
@@ -312,6 +321,9 @@ impl GritApp {
         }
     }
     fn stage_hunk(&mut self, path: &str, hunk_index: usize) {
+        if self.operation.is_some() {
+            return;
+        }
         let Some(repo) = self.repo() else { return };
         let mut options = git2::DiffOptions::new();
         options
@@ -438,6 +450,9 @@ impl GritApp {
         self.start_git_command("Commit", args);
     }
     fn checkout(&mut self, name: &str) {
+        if self.operation.is_some() {
+            return;
+        }
         if let Some(r) = self.repo() {
             let result = r.find_branch(name, BranchType::Local).and_then(|b| {
                 let obj = b.get().peel(git2::ObjectType::Commit)?;
@@ -459,12 +474,22 @@ impl GritApp {
             ui.label(RichText::new("grit").size(21.).strong().color(TEXT));
             ui.label(RichText::new("●").color(BLUE));
             ui.separator();
-            if ui.button("＋  Open repository").clicked()
+            if ui
+                .add_enabled(
+                    self.operation.is_none(),
+                    egui::Button::new("＋  Open repository"),
+                )
+                .clicked()
                 && let Some(p) = rfd::FileDialog::new().pick_folder()
             {
                 self.open(p)
             }
-            if ui.button("Init repository").clicked()
+            if ui
+                .add_enabled(
+                    self.operation.is_none(),
+                    egui::Button::new("Init repository"),
+                )
+                .clicked()
                 && let Some(p) = rfd::FileDialog::new().pick_folder()
             {
                 self.init_repository(p)
@@ -475,7 +500,10 @@ impl GritApp {
             {
                 self.refresh()
             }
-            if ui.button("↓ Clone").clicked() {
+            if ui
+                .add_enabled(self.operation.is_none(), egui::Button::new("↓ Clone"))
+                .clicked()
+            {
                 self.show_clone = true;
             }
             let connected = self.path.is_some();
@@ -732,7 +760,10 @@ impl GritApp {
                 {
                     self.git_action("Abort merge", &["merge", "--abort"]);
                 }
-                if ui.button("Stage all  →").clicked() {
+                if ui
+                    .add_enabled(self.operation.is_none(), egui::Button::new("Stage all  →"))
+                    .clicked()
+                {
                     let paths: Vec<_> = self
                         .changes
                         .iter()
@@ -1273,11 +1304,15 @@ impl GritApp {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Repository remotes").color(MUTED));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button("Add remote").clicked() {
+                if ui
+                    .add_enabled(self.operation.is_none(), egui::Button::new("Add remote"))
+                    .clicked()
+                {
                     let name = self.remote_name.trim().to_owned();
                     let url = self.remote_url.trim().to_owned();
                     if !name.is_empty()
                         && !url.is_empty()
+                        && self.operation.is_none()
                         && let Some(repo) = self.repo()
                     {
                         match repo.remote(&name, &url) {
