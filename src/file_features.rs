@@ -170,7 +170,7 @@ impl GritApp {
             ui.colored_label(Color32::LIGHT_RED, error);
         }
         ui.columns(2, |cols| {
-            egui::ScrollArea::vertical().show(&mut cols[0], |ui| {
+            egui::ScrollArea::vertical().id_salt("file_revision_list").show(&mut cols[0], |ui| {
                 let mut picked = None;
                 for (i, rev) in self.file_tools.revisions.iter().enumerate() {
                     if ui.selectable_label(i == self.file_tools.selected, format!("{}  {}\n{}\n{}", rev.kind, &rev.id[..8.min(rev.id.len())], rev.summary, rev.date)).clicked() { picked = Some(i); }
@@ -188,7 +188,7 @@ impl GritApp {
                 cols[1].label("Binary file; preview is unavailable. Export the revision to save the exact blob contents.");
             } else {
                 let mut text = String::from_utf8_lossy(&self.file_tools.bytes).into_owned();
-                egui::ScrollArea::both().show(&mut cols[1], |ui| { ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_width(f32::INFINITY)); });
+                egui::ScrollArea::both().id_salt("file_revision_content").show(&mut cols[1], |ui| { ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_width(f32::INFINITY)); });
             }
         });
         if let Some((path, blob)) = self.file_tools.pending_export.clone() {
