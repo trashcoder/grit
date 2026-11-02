@@ -65,6 +65,7 @@ struct GritApp {
     open_after_operation: Option<PathBuf>,
     aux_output: String,
     pending_discard: Option<String>,
+    conflict_draft: Option<(String, String)>,
 }
 impl GritApp {
     fn repo(&self) -> Option<Repository> {
@@ -397,6 +398,31 @@ impl GritApp {
         });
         self.notice = format!("{label} in progress…");
         self.operation = Some((label, rx));
+    }
+    fn edit_conflict(&mut self, path: &str) {
+        let Some(root) = self.path.as_ref() else {
+            return;
+        };
+        let full_path = root.join(path);
+        let content = match std::fs::metadata(&full_path) {
+            Ok(meta) if meta.len() > 4 * 1024 * 1024 => {
+                self.notice = "Conflict editor supports files up to 4 MB".into();
+                return;
+            }
+            Ok(_) => match std::fs::read_to_string(&full_path) {
+                Ok(content) => content,
+                Err(_) => {
+                    self.notice = "Conflict file is binary or not valid UTF-8".into();
+                    return;
+                }
+            },
+            Err(error) => {
+                self.notice = format!("Could not open conflict file: {error}");
+                return;
+            }
+        };
+        self.selected_file = Some(path.to_owned());
+        self.conflict_draft = Some((path.to_owned(), content));
     }
     fn commit(&mut self) {
         let msg = self.message.trim().to_owned();
@@ -758,6 +784,7 @@ impl GritApp {
                                     .clicked()
                                 {
                                     self.select_file(path.clone());
+                                    self.edit_conflict(&path);
                                 }
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                     if ui
@@ -792,6 +819,58 @@ impl GritApp {
                         }
                     });
                 ui.add_space(6.);
+            }
+        }
+        let mut save_conflict = None;
+        let mut cancel_conflict_edit = false;
+        if let Some((path, content)) = &mut self.conflict_draft {
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(8.)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("Resolve · {path}"))
+                                .strong()
+                                .color(TEXT),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    self.operation.is_none(),
+                                    egui::Button::new("Save and mark resolved"),
+                                )
+                                .clicked()
+                            {
+                                save_conflict = Some((path.clone(), content.clone()));
+                            }
+                            if ui.button("Cancel edit").clicked() {
+                                cancel_conflict_edit = true;
+                            }
+                        });
+                    });
+                    ui.add(
+                        egui::TextEdit::multiline(content)
+                            .code_editor()
+                            .desired_rows(12)
+                            .desired_width(f32::INFINITY),
+                    );
+                });
+        }
+        if cancel_conflict_edit {
+            self.conflict_draft = None;
+        }
+        if let Some((path, content)) = save_conflict
+            && let Some(root) = &self.path
+        {
+            match std::fs::write(root.join(&path), content) {
+                Ok(()) => {
+                    self.conflict_draft = None;
+                    self.resolve_conflict(&path, None);
+                }
+                Err(error) => self.notice = format!("Could not save conflict file: {error}"),
             }
         }
         egui::Frame::new()
