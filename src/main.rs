@@ -37,6 +37,7 @@ struct Commit {
 #[derive(Default)]
 struct GritApp {
     path: Option<PathBuf>,
+    open_repos: Vec<PathBuf>,
     recent_repos: Vec<PathBuf>,
     commits: Vec<Commit>,
     changes: Vec<Change>,
@@ -90,6 +91,9 @@ impl GritApp {
                 }
                 self.path = Some(opened_path);
                 if let Some(path) = self.path.clone() {
+                    if !self.open_repos.contains(&path) {
+                        self.open_repos.push(path.clone());
+                    }
                     self.remember_repo(&path)
                 }
                 self.notice = "Repository loaded".into();
@@ -110,6 +114,9 @@ impl GritApp {
                 }
                 self.path = Some(opened_path);
                 if let Some(path) = self.path.clone() {
+                    if !self.open_repos.contains(&path) {
+                        self.open_repos.push(path.clone());
+                    }
                     self.remember_repo(&path)
                 }
                 self.notice = "Repository initialized".into();
@@ -125,6 +132,28 @@ impl GritApp {
         self.diff.clear();
         self.aux_output.clear();
         self.conflict_draft = None;
+    }
+    fn close_repo_tab(&mut self, path: &Path) {
+        if self.operation.is_some() {
+            return;
+        }
+        let was_active = self.path.as_deref() == Some(path);
+        self.open_repos.retain(|open| open != path);
+        if was_active {
+            self.path = None;
+            self.reset_repo_selection();
+            self.changes.clear();
+            self.commits.clear();
+            self.stashes.clear();
+            self.tracked_files.clear();
+            self.branches.clear();
+            self.remote_branches.clear();
+            self.tags.clear();
+            self.branch.clear();
+            if let Some(next) = self.open_repos.last().cloned() {
+                self.open(next);
+            }
+        }
     }
     fn git_action(&mut self, label: &str, args: &[&str]) {
         self.start_git_command(label, args.iter().map(|s| (*s).to_owned()).collect());
@@ -566,6 +595,41 @@ impl GritApp {
                 ui.label(RichText::new("branch").color(MUTED).small());
             });
         });
+        if !self.open_repos.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                let mut switch_to = None;
+                let mut close = None;
+                for path in self.open_repos.clone() {
+                    let active = self.path.as_ref() == Some(&path);
+                    let label = path.file_name().unwrap_or_default().to_string_lossy();
+                    ui.horizontal(|ui| {
+                        if ui
+                            .selectable_label(
+                                active,
+                                RichText::new(label).color(if active { TEXT } else { MUTED }),
+                            )
+                            .on_hover_text(path.display().to_string())
+                            .clicked()
+                        {
+                            switch_to = Some(path.clone());
+                        }
+                        if ui
+                            .add_enabled(self.operation.is_none(), egui::Button::new("×").small())
+                            .clicked()
+                        {
+                            close = Some(path.clone());
+                        }
+                    });
+                }
+                if let Some(path) = close {
+                    self.close_repo_tab(&path);
+                } else if let Some(path) = switch_to
+                    && self.path.as_ref() != Some(&path)
+                {
+                    self.open(path);
+                }
+            });
+        }
         if self.show_clone {
             egui::Window::new("Clone repository")
                 .collapsible(false)
@@ -1878,6 +1942,20 @@ impl eframe::App for GritApp {
             .collect::<Vec<_>>()
             .join("\n");
         storage.set_string("recent_repositories", paths);
+        let open_paths = self
+            .open_repos
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        storage.set_string("open_repositories", open_paths);
+        storage.set_string(
+            "active_repository",
+            self.path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+        );
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         let finished = self
@@ -1995,17 +2073,32 @@ fn main() -> eframe::Result<()> {
         opts,
         Box::new(|context| {
             let mut app = GritApp::default();
-            if let Some(storage) = context.storage
-                && let Some(recent) = storage.get_string("recent_repositories")
-            {
-                app.recent_repos = recent
-                    .lines()
+            let mut active_path = None;
+            if let Some(storage) = context.storage {
+                if let Some(recent) = storage.get_string("recent_repositories") {
+                    app.recent_repos = recent
+                        .lines()
+                        .map(PathBuf::from)
+                        .filter(|path| path.exists())
+                        .take(8)
+                        .collect();
+                }
+                if let Some(open) = storage.get_string("open_repositories") {
+                    app.open_repos = open
+                        .lines()
+                        .map(PathBuf::from)
+                        .filter(|path| Repository::open(path).is_ok())
+                        .collect();
+                }
+                active_path = storage
+                    .get_string("active_repository")
                     .map(PathBuf::from)
-                    .filter(|path| path.exists())
-                    .take(8)
-                    .collect();
+                    .filter(|path| app.open_repos.contains(path));
             }
-            if let Some(path) = app.recent_repos.first().cloned() {
+            if let Some(path) = active_path
+                .or_else(|| app.open_repos.last().cloned())
+                .or_else(|| app.recent_repos.first().cloned())
+            {
                 app.open(path);
             }
             Ok(Box::new(app))
