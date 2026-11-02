@@ -27,13 +27,13 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 
 ## Run
 
-Install Rust and Git, then run:
+For development, install Rust and Git, then run:
 
 ```sh
 cargo run --release
 ```
 
-On Linux, install the native windowing system development libraries required by eframe (X11/Wayland and OpenGL). Cargo can build the application on Windows, Linux, and macOS.
+On Linux, install the native windowing system development libraries required by eframe (X11/Wayland and OpenGL). Cargo can build the application on Windows, Linux, and macOS. The packaged app also requires Git to be installed and available on `PATH` for repository operations.
 
 ### Linux AppImage
 
@@ -50,7 +50,7 @@ For broad distro compatibility, build the AppImage on Ubuntu 22.04 or use the Li
 
 ## Platform builds
 
-The GitHub Actions workflow builds a release binary on Windows, Linux, Apple Silicon macOS, and Intel macOS for each pull request, main branch update, and version tag. Linux runs also produce the `grit-linux-AppImage-x86_64` artifact.
+The GitHub Actions workflow builds on Windows, Linux, Apple Silicon macOS, and Intel macOS for each pull request, main branch update, and version tag. Its downloadable artifacts include a portable Windows ZIP, a macOS `.app` bundle ZIP for each architecture, and the `grit-linux-AppImage-x86_64` AppImage. The CI macOS bundle is not code signed, so macOS may ask you to confirm the first launch.
 
 ## Current scope
 
