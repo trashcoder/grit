@@ -14,7 +14,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 - Review working tree changes and unified diffs
 - Stage and unstage files
 - Stage individual diff hunks
-- Edit a diff patch to stage selected changed lines
+- Edit a diff patch for partial line staging
 - Resolve merge conflicts by choosing either side or marking an edited file resolved
 - Save and restore stashes
 - Create commits
