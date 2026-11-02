@@ -1206,7 +1206,7 @@ impl GritApp {
                         if ui
                             .add_enabled(
                                 self.operation.is_none(),
-                                egui::Button::new("Edit patch to stage selected lines"),
+                                egui::Button::new("Edit patch for partial staging"),
                             )
                             .clicked()
                         {
@@ -1259,7 +1259,7 @@ impl GritApp {
                         });
                     });
                     ui.label(
-                        RichText::new("Remove the + or − lines you do not want staged, then apply the remaining patch.")
+                        RichText::new("Keep + or − lines you want staged. Remove unwanted + lines. To leave a − line unstaged, change its prefix to a space so it remains as context.")
                             .small()
                             .color(MUTED),
                     );
