@@ -9,6 +9,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 - Initialize a repository or clone one from HTTPS/SSH
 - Browse local branches and check them out
 - Rebase the current branch onto another local branch and continue or abort after conflicts
+- Edit an interactive rebase plan to reorder, squash, fix up, or drop commits
 - Create and safely delete local branches
 - Create lightweight tags
 - Configure remotes, fetch, pull (fast-forward only), and push
@@ -53,4 +54,4 @@ The GitHub Actions workflow builds a release binary on Windows, Linux, Apple Sil
 
 ## Current scope
 
-Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive reordering and squashing of commits are not implemented yet.
+Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive rebase plans require a clean working tree and currently exclude merge commits.
