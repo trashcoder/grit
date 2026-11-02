@@ -49,6 +49,8 @@ struct GritApp {
     remote_branches: Vec<String>,
     tags: Vec<String>,
     branch: String,
+    branch_has_upstream: bool,
+    push_remote: Option<String>,
     selected_commit: Option<String>,
     selected_file: Option<String>,
     file_content: String,
@@ -151,6 +153,8 @@ impl GritApp {
         self.pending_stash_drop = None;
         self.pending_init = None;
         self.rebase_draft = None;
+        self.branch_has_upstream = false;
+        self.push_remote = None;
     }
     fn close_repo_tab(&mut self, path: &Path) {
         if self.operation.is_some() {
@@ -169,6 +173,8 @@ impl GritApp {
             self.remote_branches.clear();
             self.tags.clear();
             self.branch.clear();
+            self.branch_has_upstream = false;
+            self.push_remote = None;
             if let Some(next) = self.open_repos.last().cloned() {
                 self.open(next);
             }
@@ -373,6 +379,26 @@ impl GritApp {
             .ok()
             .and_then(|h| h.shorthand().map(str::to_owned))
             .unwrap_or_else(|| "(detached HEAD)".into());
+        self.branch_has_upstream = repo
+            .find_branch(&self.branch, BranchType::Local)
+            .is_ok_and(|branch| branch.upstream().is_ok());
+        let remotes: Vec<String> = repo
+            .remotes()
+            .ok()
+            .into_iter()
+            .flat_map(|names| {
+                names
+                    .iter()
+                    .flatten()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        self.push_remote = remotes
+            .iter()
+            .find(|name| name.as_str() == "origin")
+            .cloned()
+            .or_else(|| remotes.first().cloned());
         self.branches = repo
             .branches(Some(BranchType::Local))
             .ok()
@@ -786,11 +812,36 @@ impl GritApp {
             {
                 self.git_action("Pull", &["pull", "--ff-only"]);
             }
+            let can_publish = self.branch != "(detached HEAD)" && self.push_remote.is_some();
+            let push_label = if self.branch_has_upstream {
+                "Push"
+            } else {
+                "Publish branch"
+            };
             if ui
-                .add_enabled(connected, egui::Button::new("Push"))
+                .add_enabled(
+                    connected
+                        && self.operation.is_none()
+                        && (self.branch_has_upstream || can_publish),
+                    egui::Button::new(push_label),
+                )
+                .on_hover_text(if self.branch_has_upstream {
+                    "Push commits to the branch's configured upstream"
+                } else if can_publish {
+                    "Push this branch to the default remote and set its upstream"
+                } else {
+                    "Add a remote and select a branch before publishing"
+                })
                 .clicked()
             {
-                self.git_action("Push", &["push"]);
+                if self.branch_has_upstream {
+                    self.git_action("Push", &["push"]);
+                } else if let Some(remote) = self.push_remote.clone() {
+                    self.git_action(
+                        "Publish branch",
+                        &["push", "--set-upstream", &remote, "HEAD"],
+                    );
+                }
             }
             if ui
                 .add_enabled(
