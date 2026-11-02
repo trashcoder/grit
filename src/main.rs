@@ -885,41 +885,6 @@ impl GritApp {
                 ui.label(RichText::new("branch").color(MUTED).small());
             });
         });
-        if !self.open_repos.is_empty() {
-            ui.horizontal_wrapped(|ui| {
-                let mut switch_to = None;
-                let mut close = None;
-                for path in self.open_repos.clone() {
-                    let active = self.path.as_ref() == Some(&path);
-                    let label = path.file_name().unwrap_or_default().to_string_lossy();
-                    ui.horizontal(|ui| {
-                        if ui
-                            .selectable_label(
-                                active,
-                                RichText::new(label).color(if active { TEXT } else { MUTED }),
-                            )
-                            .on_hover_text(path.display().to_string())
-                            .clicked()
-                        {
-                            switch_to = Some(path.clone());
-                        }
-                        if ui
-                            .add_enabled(self.operation.is_none(), egui::Button::new("×").small())
-                            .clicked()
-                        {
-                            close = Some(path.clone());
-                        }
-                    });
-                }
-                if let Some(path) = close {
-                    self.close_repo_tab(&path);
-                } else if let Some(path) = switch_to
-                    && self.path.as_ref() != Some(&path)
-                {
-                    self.open(path);
-                }
-            });
-        }
         if self.show_clone {
             egui::Window::new("Clone repository")
                 .collapsible(false)
@@ -949,37 +914,93 @@ impl GritApp {
     }
     fn sidebar(&mut self, ui: &mut egui::Ui) {
         ui.set_min_width(205.);
-        if let Some(p) = &self.path {
-            ui.label(
-                RichText::new(p.file_name().unwrap_or_default().to_string_lossy())
-                    .strong()
-                    .color(TEXT),
-            );
-            ui.label(RichText::new(p.display().to_string()).small().color(MUTED));
-        } else {
-            ui.label(
-                RichText::new("YOUR WORKSPACE")
-                    .small()
-                    .strong()
-                    .color(MUTED),
-            );
-            ui.add_space(12.);
-            ui.label(
-                RichText::new("RECENT REPOSITORIES")
-                    .small()
-                    .strong()
-                    .color(MUTED),
-            );
-            for path in self.recent_repos.clone() {
-                let title = path.file_name().unwrap_or_default().to_string_lossy();
+        ui.label(RichText::new("OPEN").small().strong().color(MUTED));
+        let mut switch_repo = None;
+        let mut close_repo = None;
+        for path in self.open_repos.clone() {
+            let active = self.path.as_ref() == Some(&path);
+            let title = path.file_name().unwrap_or_default().to_string_lossy();
+            ui.horizontal(|ui| {
                 if ui
-                    .selectable_label(false, RichText::new(format!("◈  {title}")).color(TEXT))
+                    .selectable_label(
+                        active,
+                        RichText::new(format!("◈  {title}")).color(if active {
+                            TEXT
+                        } else {
+                            MUTED
+                        }),
+                    )
                     .on_hover_text(path.display().to_string())
                     .clicked()
                 {
-                    self.open(path);
+                    switch_repo = Some(path.clone());
                 }
+                if ui
+                    .add_enabled(self.operation.is_none(), egui::Button::new("×").small())
+                    .clicked()
+                {
+                    close_repo = Some(path.clone());
+                }
+            });
+        }
+        if let Some(path) = close_repo {
+            self.close_repo_tab(&path);
+        } else if let Some(path) = switch_repo
+            && self.path.as_ref() != Some(&path)
+        {
+            self.open(path);
+        }
+        if self.open_repos.is_empty() {
+            ui.label(RichText::new("No repositories open").small().color(MUTED));
+        }
+        ui.add_space(10.);
+        ui.label(RichText::new("RECENT").small().strong().color(MUTED));
+        egui::ScrollArea::vertical()
+            .max_height(150.)
+            .show(ui, |ui| {
+                for path in self.recent_repos.clone() {
+                    let title = path.file_name().unwrap_or_default().to_string_lossy();
+                    if ui
+                        .selectable_label(
+                            self.path.as_ref() == Some(&path),
+                            RichText::new(format!("◈  {title}")).color(TEXT),
+                        )
+                        .on_hover_text(path.display().to_string())
+                        .clicked()
+                        && self.path.as_ref() != Some(&path)
+                    {
+                        self.open(path);
+                    }
+                }
+                if self.recent_repos.is_empty() {
+                    ui.label(RichText::new("No recent repositories").small().color(MUTED));
+                }
+            });
+        ui.add_space(10.);
+        ui.label(RichText::new("REMOTES").small().strong().color(MUTED));
+        let remote_names: Vec<String> = self
+            .repo()
+            .and_then(|repo| {
+                repo.remotes()
+                    .ok()
+                    .map(|names| names.iter().flatten().map(str::to_owned).collect())
+            })
+            .unwrap_or_default();
+        for name in &remote_names {
+            if ui
+                .selectable_label(
+                    self.tab == 3,
+                    RichText::new(format!("⇄  {name}")).color(TEXT),
+                )
+                .clicked()
+            {
+                self.tab = 3;
+                self.selected_commit = None;
+                self.selected_commit_file = None;
             }
+        }
+        if self.path.is_some() && remote_names.is_empty() {
+            ui.label(RichText::new("No remotes configured").small().color(MUTED));
         }
         ui.add_space(14.);
         ui.label(RichText::new("WORKING TREE").small().strong().color(MUTED));
