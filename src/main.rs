@@ -40,12 +40,14 @@ struct GritApp {
     commits: Vec<Commit>,
     changes: Vec<Change>,
     stashes: Vec<(usize, String)>,
+    tracked_files: Vec<String>,
     branches: Vec<String>,
     remote_branches: Vec<String>,
     tags: Vec<String>,
     branch: String,
     selected_commit: Option<String>,
     selected_file: Option<String>,
+    file_content: String,
     diff: String,
     message: String,
     search: String,
@@ -198,6 +200,15 @@ impl GritApp {
             .collect();
         self.changes = statuses(&repo);
         self.commits = history(&repo);
+        self.tracked_files = repo
+            .index()
+            .map(|index| {
+                index
+                    .iter()
+                    .filter_map(|entry| String::from_utf8(entry.path).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
         self.stashes.clear();
         let _ = repo.stash_foreach(|index, message, _| {
             self.stashes.push((index, message.to_owned()));
@@ -217,6 +228,24 @@ impl GritApp {
         if let Some(r) = self.repo() {
             self.diff = diff_file(&r, &p)
         }
+    }
+    fn preview_file(&mut self, path: &str) {
+        self.selected_file = Some(path.to_owned());
+        let Some(full_path) = self.path.as_ref().map(|root| root.join(path)) else {
+            return;
+        };
+        self.file_content = match std::fs::symlink_metadata(&full_path) {
+            Ok(meta) if meta.file_type().is_symlink() => std::fs::read_link(&full_path)
+                .map(|target| format!("Symlink → {}", target.display()))
+                .unwrap_or_else(|e| format!("Cannot read symlink: {e}")),
+            Ok(meta) if meta.len() > 4 * 1024 * 1024 => format!(
+                "Preview skipped: file is {} MB (limit: 4 MB).",
+                meta.len() / 1024 / 1024
+            ),
+            Ok(_) => std::fs::read_to_string(&full_path)
+                .unwrap_or_else(|_| "Binary or non UTF-8 file; text preview unavailable.".into()),
+            Err(e) => format!("Cannot read file: {e}"),
+        };
     }
     fn stage(&mut self, p: &str, unstage: bool) {
         if let Some(r) = self.repo()
@@ -448,6 +477,7 @@ impl GritApp {
             ("⑂", "Branches", self.branches.len(), 2),
             ("⇄", "Remotes", 0, 3),
             ("▤", "Blame", 0, 4),
+            ("▣", "Files", self.tracked_files.len(), 5),
         ] {
             ui.horizontal(|ui| {
                 if ui
@@ -504,6 +534,7 @@ impl GritApp {
                     2 => "Branches",
                     3 => "Remotes",
                     4 => "Blame",
+                    5 => "Files",
                     _ => "Changes",
                 })
                 .size(18.)
@@ -526,6 +557,7 @@ impl GritApp {
             2 => self.branches_view(ui),
             3 => self.remotes_view(ui),
             4 => self.blame_view(ui),
+            5 => self.files_view(ui),
             _ => self.changes_view(ui),
         }
         if let Some(path) = self.pending_discard.clone() {
@@ -1057,6 +1089,78 @@ impl GritApp {
                     }
                 })
             });
+    }
+    fn files_view(&mut self, ui: &mut egui::Ui) {
+        if self.path.is_none() {
+            self.empty(
+                ui,
+                "No repository open",
+                "Open a repository to browse tracked files.",
+            );
+            return;
+        }
+        let query = self.search.to_lowercase();
+        let files: Vec<String> = self
+            .tracked_files
+            .iter()
+            .filter(|path| query.is_empty() || path.to_lowercase().contains(&query))
+            .cloned()
+            .collect();
+        ui.columns(2, |columns| {
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(6.)
+                .show(&mut columns[0], |ui| {
+                    ui.label(
+                        RichText::new(format!("Tracked files · {}", files.len()))
+                            .small()
+                            .color(MUTED),
+                    );
+                    egui::ScrollArea::vertical().show_rows(ui, 24., files.len(), |ui, range| {
+                        for index in range {
+                            let path = &files[index];
+                            if ui
+                                .selectable_label(
+                                    self.selected_file.as_deref() == Some(path),
+                                    RichText::new(path).monospace().color(TEXT),
+                                )
+                                .clicked()
+                            {
+                                self.preview_file(path);
+                            }
+                        }
+                    });
+                });
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(8.)
+                .show(&mut columns[1], |ui| {
+                    ui.label(
+                        RichText::new(self.selected_file.as_deref().unwrap_or("Select a file"))
+                            .strong()
+                            .color(TEXT),
+                    );
+                    ui.separator();
+                    egui::ScrollArea::both().show(ui, |ui| {
+                        for (line_number, line) in self.file_content.lines().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{:>4}", line_number + 1))
+                                        .font(FontId::monospace(12.))
+                                        .color(MUTED),
+                                );
+                                ui.label(
+                                    RichText::new(line).font(FontId::monospace(12.)).color(TEXT),
+                                );
+                            });
+                        }
+                    });
+                });
+        });
     }
     fn diff_panel(&self, ui: &mut egui::Ui) {
         egui::ScrollArea::both().max_height(270.).show(ui, |ui| {
