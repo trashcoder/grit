@@ -976,12 +976,46 @@ impl GritApp {
                 if ui.button("Stash save").clicked() {
                     self.git_action("Stash", &["stash", "push", "-u", "-m", "Saved from grit"]);
                 }
-                let merging = self
-                    .repo()
-                    .is_some_and(|r| r.state() == git2::RepositoryState::Merge);
-                if ui
-                    .add_enabled(merging, egui::Button::new("Abort merge"))
-                    .clicked()
+                let repo_state = self.repo().map(|repo| repo.state());
+                let rebase_active = repo_state.is_some_and(|state| {
+                    matches!(
+                        state,
+                        git2::RepositoryState::Rebase
+                            | git2::RepositoryState::RebaseInteractive
+                            | git2::RepositoryState::RebaseMerge
+                    )
+                });
+                let rebase_has_conflicts = self.repo().is_some_and(|repo| {
+                    repo.index().is_ok_and(|index| {
+                        index
+                            .conflicts()
+                            .is_ok_and(|mut conflicts| conflicts.next().is_some())
+                    })
+                });
+                if rebase_active {
+                    if ui
+                        .add_enabled(
+                            self.operation.is_none() && !rebase_has_conflicts,
+                            egui::Button::new("Continue rebase"),
+                        )
+                        .on_hover_text("Resolve and stage conflicts before continuing")
+                        .clicked()
+                    {
+                        self.git_action(
+                            "Continue rebase",
+                            &["-c", "core.editor=true", "rebase", "--continue"],
+                        );
+                    }
+                    if ui
+                        .add_enabled(self.operation.is_none(), egui::Button::new("Abort rebase"))
+                        .clicked()
+                    {
+                        self.git_action("Abort rebase", &["rebase", "--abort"]);
+                    }
+                } else if repo_state == Some(git2::RepositoryState::Merge)
+                    && ui
+                        .add_enabled(self.operation.is_none(), egui::Button::new("Abort merge"))
+                        .clicked()
                 {
                     self.git_action("Abort merge", &["merge", "--abort"]);
                 }
@@ -1577,6 +1611,15 @@ impl GritApp {
                                 }
                                 if ui.small_button("Merge into current").clicked() {
                                     self.git_action("Merge", &["merge", "--no-edit", &b]);
+                                }
+                                if ui
+                                    .add_enabled(
+                                        self.operation.is_none(),
+                                        egui::Button::new("Rebase current onto"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.git_action("Rebase", &["rebase", &b]);
                                 }
                                 if ui.button("Checkout").clicked() {
                                     self.checkout(&b)
@@ -2268,7 +2311,10 @@ impl eframe::App for GritApp {
                 }
                 Err(error) => {
                     self.open_after_operation = None;
-                    self.notice = format!("{label} failed: {error}")
+                    self.notice = format!("{label} failed: {error}");
+                    if label.to_lowercase().contains("rebase") {
+                        self.refresh();
+                    }
                 }
             }
         } else if self.operation.is_some() {
