@@ -84,7 +84,11 @@ impl GritApp {
         }
         match Repository::open(&p) {
             Ok(r) => {
-                self.path = Some(r.workdir().unwrap_or(&p).to_path_buf());
+                let opened_path = r.workdir().unwrap_or(&p).to_path_buf();
+                if self.path.as_ref() != Some(&opened_path) {
+                    self.reset_repo_selection();
+                }
+                self.path = Some(opened_path);
                 if let Some(path) = self.path.clone() {
                     self.remember_repo(&path)
                 }
@@ -100,7 +104,11 @@ impl GritApp {
         }
         match Repository::init(&p) {
             Ok(repo) => {
-                self.path = Some(repo.workdir().unwrap_or(&p).to_path_buf());
+                let opened_path = repo.workdir().unwrap_or(&p).to_path_buf();
+                if self.path.as_ref() != Some(&opened_path) {
+                    self.reset_repo_selection();
+                }
+                self.path = Some(opened_path);
                 if let Some(path) = self.path.clone() {
                     self.remember_repo(&path)
                 }
@@ -109,6 +117,14 @@ impl GritApp {
             }
             Err(e) => self.notice = format!("Could not initialize repository: {e}"),
         }
+    }
+    fn reset_repo_selection(&mut self) {
+        self.selected_commit = None;
+        self.selected_file = None;
+        self.file_content.clear();
+        self.diff.clear();
+        self.aux_output.clear();
+        self.conflict_draft = None;
     }
     fn git_action(&mut self, label: &str, args: &[&str]) {
         self.start_git_command(label, args.iter().map(|s| (*s).to_owned()).collect());
