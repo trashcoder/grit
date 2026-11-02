@@ -620,6 +620,16 @@ impl GritApp {
                 self.refresh()
             }
             if ui
+                .add_enabled(
+                    self.path.is_some(),
+                    egui::Button::new(format!("History ({})", self.commits.len())),
+                )
+                .clicked()
+            {
+                self.tab = 1;
+                self.selected_commit = None;
+            }
+            if ui
                 .add_enabled(self.operation.is_none(), egui::Button::new("↓ Clone"))
                 .clicked()
             {
@@ -1340,6 +1350,11 @@ impl GritApp {
             .cloned()
             .collect();
         if rows.is_empty() {
+            let repository = self
+                .path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "No repository open".into());
             self.empty(
                 ui,
                 if self.history_error.is_some() {
@@ -1349,13 +1364,16 @@ impl GritApp {
                 } else {
                     "No matching commits"
                 },
-                self.history_error
-                    .as_deref()
-                    .unwrap_or(if self.commits.is_empty() {
-                        "This repository has no reachable commit history yet."
-                    } else {
-                        "Adjust the commit or author filter to see more history."
-                    }),
+                &format!(
+                    "{}\nRepository: {repository}",
+                    self.history_error
+                        .as_deref()
+                        .unwrap_or(if self.commits.is_empty() {
+                            "This repository has no reachable commit history yet."
+                        } else {
+                            "Adjust the commit or author filter to see more history."
+                        })
+                ),
             );
             return;
         }
