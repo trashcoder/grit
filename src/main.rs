@@ -1151,6 +1151,61 @@ impl GritApp {
                 self.diff = diff_commit(&r, &id)
             }
         }
+        if let Some(id) = self.selected_commit.clone() {
+            ui.add_space(8.);
+            egui::Frame::new()
+                .fill(PANEL2)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(8.)
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(format!("Selected commit {}", &id[..7.min(id.len())]))
+                                .small()
+                                .monospace()
+                                .color(MUTED),
+                        );
+                        if ui
+                            .add_enabled(self.operation.is_none(), egui::Button::new("Cherry-pick"))
+                            .clicked()
+                        {
+                            self.git_action("Cherry-pick", &["cherry-pick", &id]);
+                        }
+                        if ui
+                            .add_enabled(self.operation.is_none(), egui::Button::new("Revert"))
+                            .clicked()
+                        {
+                            self.git_action("Revert", &["revert", "--no-edit", &id]);
+                        }
+                        if ui
+                            .add_enabled(
+                                self.operation.is_none(),
+                                egui::Button::new("Checkout detached"),
+                            )
+                            .clicked()
+                        {
+                            self.git_action("Checkout commit", &["checkout", "--detach", &id]);
+                        }
+                        ui.add_sized(
+                            [150., 24.],
+                            egui::TextEdit::singleline(&mut self.new_branch)
+                                .hint_text("branch name"),
+                        );
+                        if ui
+                            .add_enabled(
+                                self.operation.is_none() && !self.new_branch.trim().is_empty(),
+                                egui::Button::new("Create branch here"),
+                            )
+                            .clicked()
+                        {
+                            let name = self.new_branch.trim().to_owned();
+                            self.git_action("Create branch", &["checkout", "-b", &name, &id]);
+                            self.new_branch.clear();
+                        }
+                    });
+                });
+        }
         ui.add_space(10.);
         egui::Frame::new()
             .fill(PANEL)
