@@ -36,7 +36,7 @@ Abgleich mit dem vorhandenen grit-Code: `src/main.rs`, `src/ui.rs`, `src/tests.r
 | Repository über `.git` öffnen | Über libgit2 möglich | Worktree- und Bare-Fälle gesondert testen |
 | Repository-Chooser und neue Fenster | Teilweise | Menü mit Recent-Liste vorhanden; Mehrfenster offen |
 | Diff- und History-Bereich maximieren | Fehlt | `Ctrl/Cmd+M`, temporärer Fokusmodus |
-| Baum-/Listen-/Doppelbaum-Dateiansicht | Staging-Doppelliste vorhanden | Echte Verzeichnisbäume bleiben Ausbau |
+| Baum-/Listen-/Doppelbaum-Dateiansicht | Staging-Doppelliste vorhanden | Echte Verzeichnisbäume für Files, Commit und Changes in Runde 2 integriert |
 | Log mit Operationen und Fehlern | Nur aktuelle Statusmeldung | Begrenzte Sitzungshistorie mit vollständiger Ausgabe ergänzen |
 | Dateisystemänderungen automatisch erkennen | Fehlt | Gedrosseltes Refresh bei Fokuswechsel; voller Watcher offen |
 | Terminal und Dateimanager öffnen | Fehlt | Plattformabhängige explizite Benutzeraktionen; keine Shell-Interpolation |
@@ -65,7 +65,7 @@ Quelle: `CommitList.cpp`, `CommitToolBar.cpp`, `AdvancedSearchWidget.cpp`, `Hist
 | Suchvorschläge, Query-Sprache mit Gruppierung | Fehlt | Nicht mit einfachem Substring-Suchfeld gleichsetzen |
 | Commit komplett lesen, Autor und Committer unterscheiden | Nur Summary und Autor | Vollständige Message/E-Mail/Committer/Eltern ergänzen |
 | Dateiversionen/Dateiverlauf und vorherige/nächste Revision | Nur aktueller Text/Blame | Luna-Dateiversionspaket |
-| Blame mit integrierter Timeline | Nur `git blame`-Text | Dateiverlauf ergänzt; interaktive Blame-Zeitleiste offen |
+| Blame mit integrierter Timeline | Nur `git blame`-Text | Interaktive Attribution/Commitliste in Runde 2; Heatmap bleibt offen |
 
 ### Änderungen, Diff und Staging
 
@@ -83,7 +83,7 @@ Quelle: `DiffView/HunkWidget.cpp`, `DiffView/Images.cpp`, `FileContextMenu.cpp`,
 | Ignore für einzelne Dateien und Muster | Fehlt | Luna-Repositorypaket; escaping, bestehende `.gitignore`, Symlinks testen |
 | Alte/neue Zeilennummern und farbige Herkunft | Vorhanden | Diff-Origin-Regression vorhanden |
 | Dynamischer Zeilenumbruch | Fehlt | Renderoption, Patch-Rohdaten unverändert |
-| Kontextanzahl, Whitespace ignorieren, Encoding auswählen | Fehlt | Kontext/Whitespace als reine Anzeigeoptionen; Nicht-UTF8 offen |
+| Kontextanzahl, Whitespace ignorieren, Encoding auswählen | Fehlt | Kontext und Whitespace in Runde 2; Nicht-UTF8-Encodingauswahl bleibt offen |
 | Bild-/Binärvorschau, gelöschte Bilder | Fehlt | Binärdateien sichtbar erkennen; Bildrenderer bleibt Ausbau |
 | Große Diffs erst nach Nachfrage laden | Fehlt | Größen-/Zeilenlimit und explizites »Load« ergänzen |
 | Dateiversion exportieren/mit Anwendung öffnen | Fehlt | Luna-Dateiversionspaket, bytegetreuer Export, Überschreibbestätigung |
@@ -216,4 +216,8 @@ Luna-Paket `rich_blame`: Dateiannotation über libgit2 mit Autor, E-Mail, Commit
 
 Abnahme: 47 Tests insgesamt grün; echte Repos mit zwei Autoren prüfen historische Zuordnung, nicht committete Zeilen und Fehlerfälle. UI bei 980 × 680 geprüft, inklusive Navigation von Blame in den Commitverlauf. Ein vollständiger Blame-Heatmap-Renderer und Copy/Move-Erkennung bleiben offen.
 
-Weiteres Paket dieser Runde: hierarchische Dateiansicht.
+### Hierarchische Dateiansicht
+
+Luna-Paket `file_tree`: List-/Tree-Umschaltung für Files, Commit-Dateien und beide Changes-Listen. Verzeichnisse stehen vor Dateien und sind alphabetisch sortiert; alle Aktionen behalten den vollständigen ursprünglichen Dateipfad. Statusmarker A/M/D bleiben sichtbar. Ordner lassen sich über Pfeil oder Namen aufklappen. Die Zustands-IDs enthalten Repository, Listenart und vollständigen Pfad, damit staged/unstaged dieselben Ordner unabhängig öffnen können. Zeilen und Ordnerheader sind auf die verfügbare Breite begrenzt; lange Namen sind im Hover vollständig sichtbar. Stage/Unstage und bestätigtes Discard sind im Baum über die Auswahl-Werkzeugleiste erreichbar. Der Listenmodus bleibt erhalten; die Moduswahl wird gespeichert.
+
+Abnahme: 51 Tests insgesamt grün, Clippy und Formatprüfung erfolgreich. Pure Baumtests prüfen verschachtelte/Unicode-/Backslash-Pfade, Dateiverzeichnis-Präfixe und stabile Reihenfolge. Sichtprüfung bei 980 × 680 sowie Klicktest für Stage/Unstage eines verschachtelten Dateipfads: Index enthielt exakt `src/core/parser.rs`, danach wieder keinen Pfad; die SHA-256-Prüfsumme der Arbeitsdatei blieb gleich.

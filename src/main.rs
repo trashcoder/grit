@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    tree_mode: bool,
     blame_state: blame_features::BlameState,
     diff_preferences: diff_preferences::DiffPreferences,
     display_diff: String,
@@ -139,6 +140,7 @@ impl GritApp {
                     self.remember_repo(&path)
                 }
                 self.tab = 1;
+                self.focused_history_table = true;
                 self.notice = "Repository loaded".into();
                 if self.message.is_empty() {
                     match commit_features::load_template(&r) {
@@ -1126,6 +1128,7 @@ impl GritApp {
                 .clicked()
             {
                 self.tab = tab;
+                self.focused_history_table = tab == 1;
                 if tab == 5
                     && let Some(path) = self
                         .selected_file
@@ -1293,6 +1296,10 @@ impl GritApp {
                 .strong()
                 .color(TEXT),
             );
+            if matches!(self.tab, 0 | 5) {
+                ui.selectable_value(&mut self.tree_mode, false, "List");
+                ui.selectable_value(&mut self.tree_mode, true, "Tree");
+            }
             if self.tab == 1 {
                 self.history_display_options(ui);
                 if ui.small_button("Back").clicked() {
@@ -1633,7 +1640,7 @@ impl GritApp {
             self.select_history_commit(commit.id.clone());
         }
         let mut keyboard_target = None;
-        if !ui.ctx().wants_keyboard_input() {
+        if self.focused_history_table && !ui.ctx().wants_keyboard_input() {
             let current = rows
                 .iter()
                 .position(|c| self.selected_commit.as_deref() == Some(&c.id))
@@ -2026,12 +2033,22 @@ impl GritApp {
             .default_width(240.)
             .width_range(150. ..=420.)
             .show_inside(ui, |ui| {
-                ui.label(
-                    RichText::new(format!("Changed files   {}", self.commit_files.len()))
-                        .small()
-                        .strong()
-                        .color(MUTED),
-                );
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("Files   {}", self.commit_files.len()))
+                            .small()
+                            .strong()
+                            .color(MUTED),
+                    );
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .small_button(if self.tree_mode { "List" } else { "Tree" })
+                            .clicked()
+                        {
+                            self.tree_mode = !self.tree_mode;
+                        }
+                    });
+                });
                 ui.separator();
                 if ui
                     .selectable_label(self.selected_commit_file.is_none(), "All files")
@@ -2052,6 +2069,38 @@ impl GritApp {
                 egui::ScrollArea::vertical()
                     .id_salt("commit_file_list")
                     .show(ui, |ui| {
+                        if self.tree_mode {
+                            let paths = self
+                                .commit_files
+                                .iter()
+                                .map(|f| f.path.clone())
+                                .collect::<Vec<_>>();
+                            let statuses = self
+                                .commit_files
+                                .iter()
+                                .map(|f| (f.path.clone(), f.status))
+                                .collect();
+                            let action = tree_features::file_tree_status_ui(
+                                ui,
+                                (self.path.clone(), "committed"),
+                                &paths,
+                                self.selected_commit_file.as_deref(),
+                                &statuses,
+                            );
+                            match action {
+                                Some(tree_features::TreeAction::Select(path)) => {
+                                    picked = Some(path)
+                                }
+                                Some(tree_features::TreeAction::FileHistory(path)) => {
+                                    self.open_file_history(path)
+                                }
+                                Some(tree_features::TreeAction::CopyPath(path)) => {
+                                    ui.ctx().copy_text(path)
+                                }
+                                None => {}
+                            }
+                            return;
+                        }
                         for file in self.commit_files.clone() {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(file.status).monospace().color(
@@ -2075,6 +2124,7 @@ impl GritApp {
                                     .on_hover_text(&file.path)
                                     .clicked()
                                 {
+                                    self.focused_history_table = false;
                                     picked = Some(file.path.clone());
                                 }
                             });
@@ -2376,6 +2426,27 @@ impl GritApp {
                 egui::ScrollArea::vertical()
                     .id_salt("tracked_file_list")
                     .show(ui, |ui| {
+                        if self.tree_mode {
+                            let action = tree_features::file_tree_ui(
+                                ui,
+                                (self.path.clone(), "tracked"),
+                                &files,
+                                self.selected_file.as_deref(),
+                            );
+                            match action {
+                                Some(tree_features::TreeAction::Select(path)) => {
+                                    self.preview_file(&path)
+                                }
+                                Some(tree_features::TreeAction::FileHistory(path)) => {
+                                    self.open_file_history(path)
+                                }
+                                Some(tree_features::TreeAction::CopyPath(path)) => {
+                                    ui.ctx().copy_text(path)
+                                }
+                                None => {}
+                            }
+                            return;
+                        }
                         for path in &files {
                             let response = ui.add_sized(
                                 [ui.available_width(), 25.],
@@ -2832,6 +2903,7 @@ impl eframe::App for GritApp {
             .collect::<Vec<_>>()
             .join("\n");
         storage.set_string("recent_repositories", paths);
+        storage.set_string("file_tree_mode", self.tree_mode.to_string());
         storage.set_string("external_editor", self.integrations.editor_program.clone());
         storage.set_string("commit_template", self.commit_options.template.clone());
         storage.set_string(
@@ -3101,6 +3173,7 @@ mod integration_features;
 mod repository_features;
 #[cfg(test)]
 mod tests;
+mod tree_features;
 mod ui;
 
 fn main() -> eframe::Result<()> {
@@ -3171,6 +3244,7 @@ fn main() -> eframe::Result<()> {
                 app.commit_options.author_email = storage
                     .get_string("commit_author_email")
                     .unwrap_or_default();
+                app.tree_mode = storage.get_string("file_tree_mode").as_deref() == Some("true");
                 app.diff_preferences.context_lines = storage
                     .get_string("diff_context")
                     .and_then(|s| s.parse().ok())

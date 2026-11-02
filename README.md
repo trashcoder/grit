@@ -20,6 +20,8 @@ New workflows include selecting changed diff lines for stage/unstage (`S` / `U`)
 
 **Repository tools** provides branch rename/merge, annotated tags, submodule updates, and literal or pattern-based ignore entries. **LFS / external tools** provides explicit repository-local Git LFS actions when `git-lfs` is installed, an external editor, a terminal, and the file manager. File history and byte-exact version exports are available from file actions. `Ctrl/Cmd+M` focuses the active history/diff pane; `Ctrl/Cmd+Q` closes the app. Commit stars, templates and display preferences survive restarts. Diff controls offer 0–50 context lines and whitespace filtering. Line staging uses the displayed context, and is disabled while whitespace changes are hidden; file staging continues to include every change.
 
+Use **List / Tree** to browse tracked files and staged/unstaged changes as nested folders. The commit file list has its own mode button. Tree selections retain file history/copy actions and use **Stage selected file** / **Unstage selected file** controls. Blame is interactive for the working copy and historical revisions; attribution loads in the background and clicking a commit opens its history details.
+
 ## Features
 
 - Open a local Git repository

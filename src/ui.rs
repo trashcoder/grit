@@ -108,6 +108,41 @@ impl GritApp {
                 }
             });
         });
+        if self.tree_mode {
+            let selected = self
+                .selected_file
+                .clone()
+                .filter(|p| self.selected_staged == staged && changes.iter().any(|c| &c.path == p));
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .add_enabled(
+                        selected.is_some(),
+                        egui::Button::new(if staged {
+                            "Unstage selected file"
+                        } else {
+                            "Stage selected file"
+                        })
+                        .small(),
+                    )
+                    .clicked()
+                    && let Some(path) = &selected
+                {
+                    self.stage(path, staged);
+                }
+                if !staged
+                    && ui
+                        .add_enabled(selected.is_some(), egui::Button::new("Discard…").small())
+                        .clicked()
+                {
+                    self.pending_discard = selected;
+                }
+            });
+        }
+        let height = if self.tree_mode {
+            (height - 28.).max(50.)
+        } else {
+            height
+        };
         egui::ScrollArea::vertical()
             .id_salt(("change_list", staged))
             .auto_shrink([false, false])
@@ -124,6 +159,35 @@ impl GritApp {
                         .small()
                         .color(MUTED),
                     );
+                }
+                if self.tree_mode {
+                    let paths = changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>();
+                    let statuses = changes.iter().map(|c| (c.path.clone(), c.status)).collect();
+                    let selected = if self.selected_staged == staged {
+                        self.selected_file.as_deref()
+                    } else {
+                        None
+                    };
+                    let action = tree_features::file_tree_status_ui(
+                        ui,
+                        (self.path.clone(), "changes", staged),
+                        &paths,
+                        selected,
+                        &statuses,
+                    );
+                    match action {
+                        Some(tree_features::TreeAction::Select(path)) => {
+                            self.selected_diff_lines.clear();
+                            self.selected_staged = staged;
+                            self.select_file(path);
+                        }
+                        Some(tree_features::TreeAction::FileHistory(path)) => {
+                            self.open_file_history(path)
+                        }
+                        Some(tree_features::TreeAction::CopyPath(path)) => ui.ctx().copy_text(path),
+                        None => {}
+                    }
+                    return;
                 }
                 for c in changes {
                     ui.horizontal(|ui| {
