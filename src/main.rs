@@ -55,6 +55,7 @@ struct GritApp {
     diff: String,
     message: String,
     search: String,
+    file_search: String,
     notice: String,
     tab: usize,
     clone_url: String,
@@ -860,6 +861,14 @@ impl GritApp {
                         [190., 26.],
                         egui::TextEdit::singleline(&mut self.search)
                             .hint_text("⌕  Filter commits…"),
+                    );
+                });
+            } else if self.tab == 5 {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_sized(
+                        [190., 26.],
+                        egui::TextEdit::singleline(&mut self.file_search)
+                            .hint_text("⌕  Filter files…"),
                     );
                 });
             }
@@ -1818,7 +1827,7 @@ impl GritApp {
             );
             return;
         }
-        let query = self.search.to_lowercase();
+        let query = self.file_search.to_lowercase();
         let files: Vec<String> = self
             .tracked_files
             .iter()
