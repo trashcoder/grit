@@ -541,17 +541,7 @@ impl GritApp {
         if status.contains(Status::WT_NEW) && !status.intersects(index_bits) {
             self.git_action("Discard untracked file", &["clean", "-f", "--", path]);
         } else {
-            self.git_action(
-                "Discard changes",
-                &[
-                    "restore",
-                    "--source=HEAD",
-                    "--staged",
-                    "--worktree",
-                    "--",
-                    path,
-                ],
-            );
+            self.git_action("Discard changes", &["restore", "--worktree", "--", path]);
         }
     }
     fn stage_hunk(&mut self, path: &str, hunk_index: usize) {
