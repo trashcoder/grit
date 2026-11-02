@@ -34,6 +34,8 @@ mkdir -p "$ROOT/dist"
 OUTPUT_DIR="$ROOT/target/appimage-output"
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$ROOT/target/AppDir"
+mkdir -p "$ROOT/target/AppDir/usr/share/licenses/grit"
+cp "$ROOT/LICENSE" "$ROOT/target/AppDir/usr/share/licenses/grit/LICENSE"
 rsvg-convert --width 256 --height 256 "$ROOT/packaging/grit.svg" > "$ROOT/target/AppDir/grit.png"
 cd "$OUTPUT_DIR"
 args=(
