@@ -4,7 +4,7 @@ Stand: 2. November 2026. Ziel: native Rust-Implementierung mit egui und libgit2;
 
 ## Referenz und Methode
 
-Analysiert wurde der öffentlich zugängliche GittyUp-Quellcode auf `master`, Commit **0115d943a8692fee20642060659ddc668904bcd9**. Eine lokale, nicht mitgelieferte Referenzkopie liegt unter `/tmp/grit-gittyup-reference`. Die Website beschreibt zusätzlich das Release 2.0.0 und ältere Funktionen; `master` kann darüber hinausgehende Funktionen enthalten. Implementierungen werden eigenständig in Rust geschrieben; C++/Qt-Code wird nicht übernommen.
+Analysiert wurde der öffentlich zugängliche GittyUp-Quellcode auf `master`, Commit **0115d943a8692fee20642060659ddc668904bcd9**. GittyUp wurde für diese Analyse nicht lokal gebaut oder gestartet; die Aussagen stammen aus den verlinkten Dokumenten und aktiven Quellcodepfaden. Eine lokale, nicht mitgelieferte Referenzkopie liegt unter `/tmp/grit-gittyup-reference`. Die Website beschreibt zusätzlich das Release 2.0.0 und ältere Funktionen; `master` kann darüber hinausgehende Funktionen enthalten. Implementierungen werden eigenständig in Rust geschrieben; C++/Qt-Code wird nicht übernommen.
 
 Quellen:
 
@@ -157,4 +157,47 @@ Offene Funktionen bleiben ausdrücklich als offen markiert. Insbesondere sind ei
 
 ## Integrations- und Testprotokoll
 
-Wird nach Abschluss der jeweiligen Integration ergänzt. Ausgangspunkt: acht Backend-Regressionstests und direkt geprüfte AppImage nach Korrektur des veralteten AppDir-Caches. Packaging muss künftig frische Staging-Verzeichnisse nutzen; geprüft wird das extrahierte AppImage-Binary, nicht allein `target/release/grit`.
+Ausgangspunkt waren acht Backend-Regressionstests und die geprüfte AppImage nach Korrektur des veralteten AppDir-Caches. Packaging nutzt nun frische Staging-Verzeichnisse; geprüft wird das extrahierte AppImage-Binary, nicht allein `target/release/grit`.
+
+### In dieser Runde integriert
+
+| Feature | Implementierung | Ergebnis |
+|---|---|---|
+| Selektives Stage/Unstage | `diff_features.rs`, Index-Patchaktion, anklickbare Diff-Zeilen | 14 Git-basierte Patchtests; UI-Einzelzeile stagen/unstagen geprüft, Worktree-SHA blieb gleich |
+| Vorlagen/Autor | `commit_features.rs`, eigenes Optionsfenster, Persistenz | Benannte Vorlagen, Add/Replace/Remove/Import/Export, Apply-Bestätigung, Git-Vorlage, Amend-Message, Author-Override, Sign-off |
+| Historische Dateien | `file_features.rs`, Files-Toolbar und Dateikontext | Add/Update/Delete, Text/Binär-Erkennung, Revisionen, vorherige/nächste Version, bytegetreuer Export; ausstehender Export an Blob-ID gebunden |
+| Branches/Tags/Submodule/Ignore | `repository_features.rs`, Werkzeugansicht | Rename/Merge, annotierte Tags mit Löschbestätigung, Submodule, Ignore literal und raw pattern; echte Git-Tests |
+| LFS und externe Programme | `integration_features.rs`, eigene Ansicht | Verfügbarkeits-/Init-Cache, explizites lokales Init/Track/Untrack und Locks; Editor/Terminal/Ordner, Terminalerkennung inklusive Konsole |
+| History-Komfort | `history_features.rs`, Verlaufstabelle | Repositorybezogene persistente Sterne, strukturierte UND-Suche mit Quotes/Datumsvalidierung, exakter Pfad, First-parent, Sortierung/Spalten/kompakt, Back/Next und Tastaturnavigation |
+| Detail-/Diff-Komfort | `main.rs`, `ui.rs` | Vollständige Message, Autor-E-Mail/Committer/Eltern, Wrap, große Diffs explizit laden, versteckte untracked Dateien, Fokusmodus |
+| Operationszustände | `main.rs`, `ui.rs` | Merge/Rebase/Cherry-pick/Revert fortsetzen/abbrechen; Refresh auch bei Fehlern, Sitzungslog, Refresh beim Fokuswechsel |
+
+Die datumsbasierten Suchgrenzen sind inklusiv und berücksichtigen den Commit-Zeitzonenoffset. `path:` sucht Änderungen an exakt diesem Pfad, verfolgt Umbenennungen nicht automatisch und verwendet aktuell den ersten Parent als Vergleich. Die strukturierte Suche unterstützt keine Code-Identifier-/Addition-/Deletion-Abfragen und keine boolesche Klammergrammatik.
+
+### Review-Korrekturen
+
+- Nicht selektierte Additionen dürfen beim Stage nicht zu Kontext werden. Vorwärts-/Rückwärtsrichtung und neue/gelöschte Dateien haben deshalb eigene Apply-Tests.
+- Diff-Zeilen können selbst mit `+++` oder `---` beginnen. Dateiköpfe werden anhand der Hunk-Position unterschieden, nicht allein anhand dieser Zeichen.
+- Hunks benötigen Offsets relativ zum tatsächlichen Index. Multi-Hunk- und Multi-Datei-Tests prüfen dies.
+- Dateinamen mit `[]`, `*` und Backslash benötigen literale Pfade. libgit2-Pathspec-Matching ist für eine ausgewählte Datei deaktiviert; Ignore-Escaping wird mit `git check-ignore` getestet.
+- Export-Bestätigungen müssen die ursprüngliche Blob-Version behalten, auch wenn zwischenzeitlich eine andere Revision ausgewählt wird.
+- LFS-Abfragen dürfen nicht pro Renderframe Prozesse starten. Cache mit explizitem Refresh/Invalidierung; kein automatischer Netzwerkzugriff.
+- Externe Editoren erhalten absolute geprüfte Pfade, damit Dateinamen wie `-file.txt` keine Programmoptionen werden. Terminalprogramme werden auf dem Zielsystem erkannt.
+- Vorlagen-Bestätigungszustand muss zwischen Frames erhalten bleiben. Kein stilles Ersetzen einer bestehenden Commit-Nachricht.
+
+### Explizite Grenzen
+
+Textzeilen-Staging unterstützt keine Binär-, Rename/Copy- oder reinen Mode-Patches; hierfür bleibt das Staging der gesamten Datei. Leere Dateien haben keine Textzeilen zum Selektieren. Nicht darstellbare partielle EOF-Patches werden von Git mit sichtbarer Fehlermeldung abgelehnt. Es gibt noch keinen lexikalischen Suchindex, keine Hosting-Konten-/PR-Verwaltung, keinen interaktiven Blame-Heatmap-Renderer, keine eingebettete Bildvorschau, keine vollständige externe Diff/Merge-Tool-Konfiguration und keine umfassenden Reset-/Force-Push-Dialoge. Diese Punkte bleiben Arbeitsvorrat aus der Matrix und werden nicht als erledigt ausgegeben.
+
+### Commit-Regel
+
+Auf Benutzerwunsch erhält jedes fertig geprüfte Feature einen eigenen Commit. Die Module haben getrennte Feature-Commits; die gemeinsame Verdrahtung der Oberfläche und Persistenz wird als Integrationscommit festgehalten. Dokumentations- und Packaging-Korrekturen bleiben getrennt.
+
+### Geprüfter Zwischenstand
+
+- `cargo test --locked`: **41 Tests bestanden**.
+- `cargo clippy --locked --all-targets -- -D warnings`: erfolgreich.
+- `cargo fmt --all --check` und `git diff --check`: erfolgreich.
+- UI-Prüfungen in isoliertem Test-Repository: einzelne Zeile Stage/Unstage (Indexinhalt und Worktree-Prüfsumme), strukturierte Suche, Sterne über Neustart, Vorlagen über Neustart, First-parent, Fokusmodus, Dateiversionen und Ansichten bei 980 × 680.
+- Eine zunächst doppelt verwendete ScrollArea-ID im Dateiverlauf wurde nach Sichtprüfung korrigiert.
+- Zwischenstand-AppImage wird aus diesem integrierten Stand gebaut; offene Funktionsgruppen sind weiterhin oben dokumentiert.
