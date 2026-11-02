@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=grit
+Comment=A graphical Git client
+Exec=grit %U
+Icon=grit
+Type=Application
+Terminal=false
+Categories=Development;RevisionControl;
+StartupNotify=true

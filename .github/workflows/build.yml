@@ -1,0 +1,58 @@
+name: Build desktop releases
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: grit-linux-x86_64
+            binary: target/release/grit
+          - os: windows-2025
+            artifact: grit-windows-x86_64
+            binary: target/release/grit.exe
+          - os: macos-15
+            artifact: grit-macos-arm64
+            binary: target/release/grit
+          - os: macos-15-intel
+            artifact: grit-macos-x86_64
+            binary: target/release/grit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config librsvg2-bin libx11-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libgl1-mesa-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcursor-dev libxrandr-dev libxi-dev libxfixes-dev libxext-dev libxrender-dev
+      - name: Build release binary
+        run: cargo build --locked --release
+      - name: Package Linux AppImage
+        if: runner.os == 'Linux'
+        run: ./scripts/build-appimage.sh
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+      - name: Upload Linux AppImage artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: grit-linux-AppImage-x86_64
+          path: dist/grit-x86_64.AppImage
+          if-no-files-found: error

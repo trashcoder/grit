@@ -1,0 +1,17 @@
+[package]
+name = "grit"
+version = "0.1.0"
+edition = "2024"
+description = "A native, cross-platform graphical Git client"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.31", features = ["default_fonts", "persistence"] }
+git2 = "0.20"
+rfd = "0.15"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
