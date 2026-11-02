@@ -21,7 +21,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 - Save and restore stashes
 - Create commits
 - Amend the latest commit
-- Browse the multi-branch commit graph, inspect diffs, cherry-pick or revert commits, check out a commit, and create a branch at a commit
+- Browse the multi-branch commit graph with selected commit details, a side-by-side diff and changed-file list; cherry-pick or revert commits, check out a commit, and create a branch at a commit
 - View line attribution with Git blame
 - Filter commits by message or author
 
