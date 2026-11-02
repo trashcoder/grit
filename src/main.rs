@@ -2313,14 +2313,25 @@ impl eframe::App for GritApp {
                         .stroke(Stroke::new(1., BORDER))
                         .corner_radius(10)
                         .inner_margin(12.)
-                        .show(ui, |ui| self.sidebar(ui));
+                        .show(ui, |ui| {
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(235., ui.available_height()),
+                                Layout::top_down(Align::Min),
+                                |ui| self.sidebar(ui),
+                            );
+                        });
                     ui.add_space(10.);
                     egui::Frame::new()
                         .fill(PANEL2)
                         .stroke(Stroke::new(1., BORDER))
                         .corner_radius(10)
                         .inner_margin(14.)
-                        .show(ui, |ui| self.content(ui));
+                        .show(ui, |ui| {
+                            let size = ui.available_size();
+                            ui.allocate_ui_with_layout(size, Layout::top_down(Align::Min), |ui| {
+                                self.content(ui)
+                            });
+                        });
                 });
                 ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
                     ui.label(RichText::new(&self.notice).small().color(MUTED));
