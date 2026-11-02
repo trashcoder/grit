@@ -14,6 +14,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 - Review working tree changes and unified diffs
 - Stage and unstage files
 - Stage individual diff hunks
+- Edit a diff patch to stage selected changed lines
 - Resolve merge conflicts by choosing either side or marking an edited file resolved
 - Save and restore stashes
 - Create commits
@@ -51,4 +52,4 @@ The GitHub Actions workflow builds a release binary on Windows, Linux, Apple Sil
 
 ## Current scope
 
-Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive rebase and line-level staging are not implemented yet.
+Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive rebase is not implemented yet.
