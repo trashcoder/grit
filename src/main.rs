@@ -512,8 +512,8 @@ impl GritApp {
         if self.operation.is_some() {
             return;
         }
-        if patch.trim().is_empty() {
-            self.notice = "The patch is empty".into();
+        if !patch_has_changes(patch) {
+            self.notice = "The patch contains no changed lines".into();
             return;
         }
         let Some(root) = self.path.clone() else {
@@ -1209,7 +1209,7 @@ impl GritApp {
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
                                 .add_enabled(
-                                    self.operation.is_none(),
+                                    self.operation.is_none() && patch_has_changes(patch),
                                     egui::Button::new("Stage edited patch"),
                                 )
                                 .clicked()
@@ -2056,6 +2056,12 @@ fn unstaged_patch(repo: &Repository, path: &str) -> Result<String, String> {
         return Err("Patch is larger than the 4 MB editor limit".into());
     }
     Ok(patch)
+}
+fn patch_has_changes(patch: &str) -> bool {
+    patch.lines().any(|line| {
+        (line.starts_with('+') && !line.starts_with("+++"))
+            || (line.starts_with('-') && !line.starts_with("---"))
+    })
 }
 fn unstaged_hunks(repo: &Repository, path: &str) -> Vec<(u32, u32, u32, u32)> {
     let mut options = git2::DiffOptions::new();
