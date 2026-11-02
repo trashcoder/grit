@@ -356,6 +356,48 @@ impl GritApp {
             Err(error) => self.notice = format!("Could not stage hunk: {error}"),
         }
     }
+    fn resolve_conflict(&mut self, path: &str, side: Option<&str>) {
+        if self.operation.is_some() {
+            return;
+        }
+        let Some(root) = self.path.clone() else {
+            return;
+        };
+        let path = path.to_owned();
+        let side = side.map(str::to_owned);
+        let label = match side.as_deref() {
+            Some("--ours") => "Use our version",
+            Some("--theirs") => "Use their version",
+            _ => "Mark conflict resolved",
+        }
+        .to_owned();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let run = |args: &[&str]| {
+                Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .args(args)
+                    .output()
+                    .map_err(|e| e.to_string())
+                    .and_then(|output| {
+                        if output.status.success() {
+                            Ok(String::new())
+                        } else {
+                            Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+                        }
+                    })
+            };
+            let result = if let Some(side) = side.as_deref() {
+                run(&["checkout", side, "--", &path]).and_then(|_| run(&["add", "--", &path]))
+            } else {
+                run(&["add", "--", &path])
+            };
+            let _ = tx.send(result);
+        });
+        self.notice = format!("{label} in progress…");
+        self.operation = Some((label, rx));
+    }
     fn commit(&mut self) {
         let msg = self.message.trim().to_owned();
         if msg.is_empty() {
@@ -678,6 +720,80 @@ impl GritApp {
             });
         });
         ui.add_space(6.);
+        if let Some(repo) = self.repo() {
+            let mut conflicts = Vec::new();
+            if let Ok(index) = repo.index()
+                && let Ok(entries) = index.conflicts()
+            {
+                for conflict in entries.flatten() {
+                    if let Some(path) = conflict
+                        .our
+                        .or(conflict.their)
+                        .or(conflict.ancestor)
+                        .and_then(|entry| String::from_utf8(entry.path).ok())
+                    {
+                        conflicts.push(path);
+                    }
+                }
+            }
+            if !conflicts.is_empty() {
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(57, 40, 34))
+                    .stroke(Stroke::new(1., Color32::from_rgb(145, 94, 58)))
+                    .corner_radius(8)
+                    .inner_margin(8.)
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(format!("Merge conflicts · {}", conflicts.len()))
+                                .strong()
+                                .color(Color32::from_rgb(255, 195, 128)),
+                        );
+                        for path in conflicts {
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .selectable_label(
+                                        self.selected_file.as_deref() == Some(&path),
+                                        RichText::new(&path).color(TEXT),
+                                    )
+                                    .clicked()
+                                {
+                                    self.select_file(path.clone());
+                                }
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui
+                                        .add_enabled(
+                                            self.operation.is_none(),
+                                            egui::Button::new("Mark resolved"),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.resolve_conflict(&path, None);
+                                    }
+                                    if ui
+                                        .add_enabled(
+                                            self.operation.is_none(),
+                                            egui::Button::new("Their version"),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.resolve_conflict(&path, Some("--theirs"));
+                                    }
+                                    if ui
+                                        .add_enabled(
+                                            self.operation.is_none(),
+                                            egui::Button::new("Our version"),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.resolve_conflict(&path, Some("--ours"));
+                                    }
+                                });
+                            });
+                        }
+                    });
+                ui.add_space(6.);
+            }
+        }
         egui::Frame::new()
             .fill(PANEL)
             .stroke(Stroke::new(1., BORDER))
