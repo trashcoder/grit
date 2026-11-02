@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    blame_state: blame_features::BlameState,
     diff_preferences: diff_preferences::DiffPreferences,
     display_diff: String,
     display_diff_error: Option<String>,
@@ -102,7 +103,6 @@ struct GritApp {
     amend: bool,
     operation: Option<(String, Receiver<Result<String, String>>)>,
     open_after_operation: Option<PathBuf>,
-    aux_output: String,
     pending_discard: Option<String>,
     pending_stash_drop: Option<usize>,
     pending_init: Option<PathBuf>,
@@ -183,6 +183,7 @@ impl GritApp {
     fn reset_repo_selection(&mut self) {
         self.selected_commit = None;
         self.display_diff_key = None;
+        self.blame_state = Default::default();
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -195,7 +196,6 @@ impl GritApp {
         self.selected_file = None;
         self.file_content.clear();
         self.diff.clear();
-        self.aux_output.clear();
         self.conflict_draft = None;
         self.patch_draft = None;
         self.pending_discard = None;
@@ -2039,10 +2039,15 @@ impl GritApp {
                 {
                     all = true;
                 }
-                if let Some(path) = self.selected_commit_file.clone()
-                    && ui.small_button("File history…").clicked()
-                {
-                    self.open_file_history(path);
+                if let Some(path) = self.selected_commit_file.clone() {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.small_button("File history…").clicked() {
+                            self.open_file_history(path.clone());
+                        }
+                        if ui.small_button("Blame revision…").clicked() {
+                            self.open_blame(path.clone(), Some(id.clone()));
+                        }
+                    });
                 }
                 egui::ScrollArea::vertical()
                     .id_salt("commit_file_list")
@@ -2338,27 +2343,8 @@ impl GritApp {
             }
         }
     }
-    fn blame_view(&self, ui: &mut egui::Ui) {
-        if self.aux_output.is_empty() {
-            self.empty(
-                ui,
-                "Blame view",
-                "Select a changed file and choose ‘Blame selected’.",
-            );
-            return;
-        }
-        egui::Frame::new()
-            .fill(PANEL)
-            .stroke(Stroke::new(1., BORDER))
-            .corner_radius(8)
-            .inner_margin(8.)
-            .show(ui, |ui| {
-                egui::ScrollArea::both().show(ui, |ui| {
-                    for line in self.aux_output.lines() {
-                        ui.label(RichText::new(line).font(FontId::monospace(12.)).color(TEXT));
-                    }
-                })
-            });
+    fn blame_view(&mut self, ui: &mut egui::Ui) {
+        self.blame_workspace(ui);
     }
     fn files_view(&mut self, ui: &mut egui::Ui) {
         if self.path.is_none() {
@@ -2427,8 +2413,7 @@ impl GritApp {
                             self.open_file_history(path.clone());
                         }
                         if ui.button("Blame").clicked() {
-                            self.git_action("Blame", &["blame", "--", &path]);
-                            self.tab = 4;
+                            self.open_blame(path.clone(), None);
                         }
                         if ui.button("External editor…").clicked() {
                             self.tab = 8;
@@ -2948,10 +2933,6 @@ impl eframe::App for GritApp {
                 self.operation_log.remove(0);
             }
             match result {
-                Ok(output) if label == "Blame" => {
-                    self.aux_output = output;
-                    self.notice = "Blame loaded".into();
-                }
                 Ok(output) if label == "Commit" => {
                     self.message.clear();
                     self.amend = false;
@@ -3110,6 +3091,7 @@ impl eframe::App for GritApp {
             });
     }
 }
+mod blame_features;
 mod commit_features;
 mod diff_features;
 mod diff_preferences;

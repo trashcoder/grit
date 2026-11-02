@@ -210,4 +210,10 @@ Luna-Paket `diff_preferences`: Kontextumfang 0–50 Zeilen und Whitespace-Ignori
 
 Abnahme: 45 Tests insgesamt grün; zusätzlicher Index-Test stagt eine Addition bei Kontext 0 und bestätigt unveränderte Arbeitsdatei sowie erhaltene übrige Änderungen. Git-Vergleiche prüfen Whitespace-only, gemischte Änderungen, staged und historische Diffs. Clippy ist sauber.
 
-Weitere geplante Pakete dieser Runde: hierarchische Dateiansicht und strukturiertes interaktives Blame.
+### Strukturiertes interaktives Blame
+
+Luna-Paket `rich_blame`: Dateiannotation über libgit2 mit Autor, E-Mail, Commit, Datum, ursprünglicher und aktueller Zeilennummer. Eine Commitliste zeigt die jeweilige Anzahl zugerechneter Zeilen. Arbeitskopie und historische Revision sind getrennte Aufrufe; uncommitted Zeilen werden ausdrücklich gekennzeichnet. Klick auf eine Attribution öffnet den zugehörigen Commit und hebt eventuell verdeckende Such-/Branchfilter auf. Aufruf über Files → Blame sowie Commitdatei → Blame revision. Laden läuft im Worker; die Zeilenansicht ist virtualisiert. Refresh behält die angeforderte Revision bei.
+
+Abnahme: 47 Tests insgesamt grün; echte Repos mit zwei Autoren prüfen historische Zuordnung, nicht committete Zeilen und Fehlerfälle. UI bei 980 × 680 geprüft, inklusive Navigation von Blame in den Commitverlauf. Ein vollständiger Blame-Heatmap-Renderer und Copy/Move-Erkennung bleiben offen.
+
+Weiteres Paket dieser Runde: hierarchische Dateiansicht.

@@ -40,7 +40,7 @@ New workflows include selecting changed diff lines for stage/unstage (`S` / `U`)
 - Create commits
 - Amend the latest commit
 - Browse the multi-branch commit graph with selected commit details, a unified diff and adjacent changed-file list; cherry-pick or revert commits, check out a commit, and create a branch at a commit
-- View line attribution with Git blame
+- Inspect interactive line attribution for the working copy or a historical revision, with author/commit navigation
 - Filter commits by message, author, email, SHA, date and exact changed-file path
 - Star commits and filter by first-parent ancestry
 - Select individual changed lines to stage or unstage
