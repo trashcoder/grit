@@ -40,6 +40,7 @@ struct GritApp {
     open_repos: Vec<PathBuf>,
     recent_repos: Vec<PathBuf>,
     commits: Vec<Commit>,
+    history_error: Option<String>,
     changes: Vec<Change>,
     stashes: Vec<(usize, String)>,
     tracked_files: Vec<String>,
@@ -254,7 +255,16 @@ impl GritApp {
             .filter_map(|reference| reference.shorthand().map(str::to_owned))
             .collect();
         self.changes = statuses(&repo);
-        self.commits = history(&repo);
+        match history(&repo) {
+            Ok(commits) => {
+                self.commits = commits;
+                self.history_error = None;
+            }
+            Err(error) => {
+                self.commits.clear();
+                self.history_error = Some(error);
+            }
+        }
         self.tracked_files = repo
             .index()
             .map(|index| {
@@ -1179,16 +1189,20 @@ impl GritApp {
         if rows.is_empty() {
             self.empty(
                 ui,
-                if self.commits.is_empty() {
+                if self.history_error.is_some() {
+                    "History unavailable"
+                } else if self.commits.is_empty() {
                     "No commits yet"
                 } else {
                     "No matching commits"
                 },
-                if self.commits.is_empty() {
-                    "This repository has no reachable commit history yet."
-                } else {
-                    "Adjust the commit or author filter to see more history."
-                },
+                self.history_error
+                    .as_deref()
+                    .unwrap_or(if self.commits.is_empty() {
+                        "This repository has no reachable commit history yet."
+                    } else {
+                        "Adjust the commit or author filter to see more history."
+                    }),
             );
             return;
         }
@@ -1737,15 +1751,19 @@ fn statuses(r: &Repository) -> Vec<Change> {
         })
         .unwrap_or_default()
 }
-fn history(r: &Repository) -> Vec<Commit> {
-    let Ok(mut w) = r.revwalk() else {
-        return vec![];
-    };
-    let _ = w.push_glob("refs/heads/*");
-    let _ = w.push_glob("refs/remotes/*");
-    let _ = w.push_glob("refs/tags/*");
-    let _ = w.push_head();
-    let _ = w.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL);
+fn history(r: &Repository) -> Result<Vec<Commit>, String> {
+    let mut w = r.revwalk().map_err(|error| error.message().to_owned())?;
+    w.push_glob("refs/heads/*")
+        .map_err(|error| error.message().to_owned())?;
+    w.push_glob("refs/remotes/*")
+        .map_err(|error| error.message().to_owned())?;
+    w.push_glob("refs/tags/*")
+        .map_err(|error| error.message().to_owned())?;
+    if r.head().and_then(|head| head.peel_to_commit()).is_ok() {
+        w.push_head().map_err(|error| error.message().to_owned())?;
+    }
+    w.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL)
+        .map_err(|error| error.message().to_owned())?;
     let mut reference_names: HashMap<git2::Oid, Vec<String>> = HashMap::new();
     if let Ok(references) = r.references() {
         for reference in references.flatten() {
@@ -1757,26 +1775,29 @@ fn history(r: &Repository) -> Vec<Commit> {
             }
         }
     }
-    w.filter_map(Result::ok)
-        .filter_map(|id| {
-            let c = r.find_commit(id).ok()?;
-            let date = chrono::DateTime::from_timestamp(c.time().seconds(), 0)
-                .map(|d| d.format("%b %d, %Y").to_string())
-                .unwrap_or_default();
-            let refs = reference_names.get(&id).cloned().unwrap_or_default();
-            let oid = id.to_string();
-            let parents = c.parent_ids().map(|parent| parent.to_string()).collect();
-            Some(Commit {
-                id: oid.clone(),
-                parents,
-                short: oid[..7].into(),
-                message: c.summary().unwrap_or("(no message)").into(),
-                author: c.author().name().unwrap_or("Unknown").into(),
-                date,
-                refs,
-            })
-        })
-        .collect()
+    let mut commits = Vec::new();
+    for id in w {
+        let id = id.map_err(|error| error.message().to_owned())?;
+        let c = r
+            .find_commit(id)
+            .map_err(|error| error.message().to_owned())?;
+        let date = chrono::DateTime::from_timestamp(c.time().seconds(), 0)
+            .map(|d| d.format("%b %d, %Y").to_string())
+            .unwrap_or_default();
+        let refs = reference_names.get(&id).cloned().unwrap_or_default();
+        let oid = id.to_string();
+        let parents = c.parent_ids().map(|parent| parent.to_string()).collect();
+        commits.push(Commit {
+            id: oid.clone(),
+            parents,
+            short: oid[..7].into(),
+            message: c.summary().unwrap_or("(no message)").into(),
+            author: c.author().name().unwrap_or("Unknown").into(),
+            date,
+            refs,
+        });
+    }
+    Ok(commits)
 }
 #[derive(Default)]
 struct GraphRow {
