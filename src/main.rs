@@ -310,6 +310,52 @@ impl GritApp {
             );
         }
     }
+    fn stage_hunk(&mut self, path: &str, hunk_index: usize) {
+        let Some(repo) = self.repo() else { return };
+        let mut options = git2::DiffOptions::new();
+        options
+            .pathspec(path)
+            .include_untracked(true)
+            .recurse_untracked_dirs(true);
+        let diff = match repo.diff_index_to_workdir(None, Some(&mut options)) {
+            Ok(diff) => diff,
+            Err(error) => {
+                self.notice = format!("Could not read diff: {error}");
+                return;
+            }
+        };
+        if repo
+            .status_file(Path::new(path))
+            .is_ok_and(|status| status.contains(Status::WT_NEW))
+        {
+            if let Ok(mut index) = repo.index() {
+                match index.add_path(Path::new(path)).and_then(|_| index.write()) {
+                    Ok(()) => {
+                        self.notice = "New file staged".into();
+                        self.refresh()
+                    }
+                    Err(error) => self.notice = format!("Could not stage file: {error}"),
+                }
+            }
+            return;
+        }
+        let mut remaining = hunk_index;
+        let mut apply_options = git2::ApplyOptions::new();
+        apply_options.hunk_callback(|hunk| {
+            let selected = hunk.is_some() && remaining == 0;
+            if hunk.is_some() && !selected {
+                remaining -= 1;
+            }
+            selected
+        });
+        match repo.apply(&diff, git2::ApplyLocation::Index, Some(&mut apply_options)) {
+            Ok(()) => {
+                self.notice = "Diff hunk staged".into();
+                self.refresh()
+            }
+            Err(error) => self.notice = format!("Could not stage hunk: {error}"),
+        }
+    }
     fn commit(&mut self) {
         let msg = self.message.trim().to_owned();
         if msg.is_empty() {
@@ -725,6 +771,22 @@ impl GritApp {
                 ui.separator();
                 self.diff_panel(ui)
             });
+        if let (Some(path), Some(repo)) = (self.selected_file.clone(), self.repo()) {
+            let hunks = unstaged_hunks(&repo, &path);
+            if !hunks.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Stage hunk:").small().color(MUTED));
+                    for (index, (old_start, new_start, _, _)) in hunks.iter().enumerate() {
+                        if ui
+                            .small_button(format!("−{old_start} / +{new_start}"))
+                            .clicked()
+                        {
+                            self.stage_hunk(&path, index);
+                        }
+                    }
+                });
+            }
+        }
         ui.add_space(10.);
         egui::Frame::new()
             .fill(PANEL)
@@ -1331,6 +1393,29 @@ fn diff_file(r: &Repository, path: &str) -> String {
         append_diff(&mut out, &diff);
     }
     out
+}
+fn unstaged_hunks(repo: &Repository, path: &str) -> Vec<(u32, u32, u32, u32)> {
+    let mut options = git2::DiffOptions::new();
+    options
+        .pathspec(path)
+        .include_untracked(true)
+        .recurse_untracked_dirs(true);
+    let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut options)) else {
+        return Vec::new();
+    };
+    let mut hunks = Vec::new();
+    let mut file_cb = |_: git2::DiffDelta<'_>, _: f32| true;
+    let mut hunk_cb = |_: git2::DiffDelta<'_>, hunk: git2::DiffHunk<'_>| {
+        hunks.push((
+            hunk.old_start(),
+            hunk.new_start(),
+            hunk.old_lines(),
+            hunk.new_lines(),
+        ));
+        true
+    };
+    let _ = diff.foreach(&mut file_cb, None, Some(&mut hunk_cb), None);
+    hunks
 }
 fn append_diff(out: &mut String, diff: &git2::Diff<'_>) {
     let _ = diff.print(git2::DiffFormat::Patch, |_, _, l| {
