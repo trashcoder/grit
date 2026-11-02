@@ -96,6 +96,7 @@ impl GritApp {
                     }
                     self.remember_repo(&path)
                 }
+                self.tab = 1;
                 self.notice = "Repository loaded".into();
                 self.refresh();
             }
@@ -119,6 +120,7 @@ impl GritApp {
                     }
                     self.remember_repo(&path)
                 }
+                self.tab = 1;
                 self.notice = "Repository initialized".into();
                 self.refresh();
             }
@@ -695,8 +697,8 @@ impl GritApp {
         ui.label(RichText::new("WORKING TREE").small().strong().color(MUTED));
         let count = self.changes.len();
         for (icon, label, n, tab) in [
-            ("◉", "Changes", count, 0),
             ("◈", "History", self.commits.len(), 1),
+            ("◉", "Changes", count, 0),
             ("⑂", "Branches", self.branches.len(), 2),
             ("⇄", "Remotes", 0, 3),
             ("▤", "Blame", 0, 4),
@@ -1174,6 +1176,22 @@ impl GritApp {
             })
             .cloned()
             .collect();
+        if rows.is_empty() {
+            self.empty(
+                ui,
+                if self.commits.is_empty() {
+                    "No commits yet"
+                } else {
+                    "No matching commits"
+                },
+                if self.commits.is_empty() {
+                    "This repository has no reachable commit history yet."
+                } else {
+                    "Adjust the commit or author filter to see more history."
+                },
+            );
+            return;
+        }
         let graph = graph_layout(&rows);
         let graph_width = graph
             .iter()
@@ -2072,7 +2090,10 @@ fn main() -> eframe::Result<()> {
         "grit",
         opts,
         Box::new(|context| {
-            let mut app = GritApp::default();
+            let mut app = GritApp {
+                tab: 1,
+                ..Default::default()
+            };
             let mut active_path = None;
             if let Some(storage) = context.storage {
                 if let Some(recent) = storage.get_string("recent_repositories") {
