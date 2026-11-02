@@ -40,6 +40,8 @@ struct GritApp {
     commits: Vec<Commit>,
     changes: Vec<Change>,
     branches: Vec<String>,
+    remote_branches: Vec<String>,
+    tags: Vec<String>,
     branch: String,
     selected_commit: Option<String>,
     selected_file: Option<String>,
@@ -175,6 +177,23 @@ impl GritApp {
             .flatten()
             .filter_map(|item| item.ok())
             .filter_map(|(b, _)| b.name().ok().flatten().map(str::to_owned))
+            .collect();
+        self.remote_branches = repo
+            .branches(Some(BranchType::Remote))
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter_map(|(branch, _)| branch.name().ok().flatten().map(str::to_owned))
+            .filter(|name| !name.ends_with("/HEAD"))
+            .collect();
+        self.tags = repo
+            .references_glob("refs/tags/*")
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter_map(|reference| reference.shorthand().map(str::to_owned))
             .collect();
         self.changes = statuses(&repo);
         self.commits = history(&repo);
@@ -819,6 +838,47 @@ impl GritApp {
             ui.add_space(5.)
         }
         ui.separator();
+        ui.label(
+            RichText::new("REMOTE BRANCHES")
+                .small()
+                .strong()
+                .color(MUTED),
+        );
+        if self.remote_branches.is_empty() {
+            ui.label(
+                RichText::new("Fetch a remote to list its branches.")
+                    .small()
+                    .color(MUTED),
+            );
+        }
+        for branch in self.remote_branches.clone() {
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1., BORDER))
+                .corner_radius(8)
+                .inner_margin(8.)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("⇄").color(BLUE));
+                        ui.label(RichText::new(&branch).color(TEXT).monospace());
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    self.operation.is_none(),
+                                    egui::Button::new("Checkout as local branch"),
+                                )
+                                .clicked()
+                            {
+                                self.git_action(
+                                    "Checkout remote branch",
+                                    &["checkout", "--track", &branch],
+                                );
+                            }
+                        });
+                    });
+                });
+        }
+        ui.separator();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Create tag at HEAD").color(MUTED));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -835,6 +895,18 @@ impl GritApp {
                 );
             });
         });
+        ui.add_space(8.);
+        ui.label(RichText::new("Tags").color(MUTED));
+        for tag in self.tags.clone() {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("◆  {tag}")).color(GREEN));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.small_button("Delete tag").clicked() {
+                        self.git_action("Delete tag", &["tag", "-d", &tag]);
+                    }
+                });
+            });
+        }
     }
     fn remotes_view(&mut self, ui: &mut egui::Ui) {
         if self.path.is_none() {
