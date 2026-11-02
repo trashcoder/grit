@@ -72,6 +72,7 @@ struct GritApp {
     pending_discard: Option<String>,
     pending_stash_drop: Option<usize>,
     pending_init: Option<PathBuf>,
+    rebase_draft: Option<(String, String)>,
     conflict_draft: Option<(String, String)>,
     patch_draft: Option<(String, String)>,
 }
@@ -149,6 +150,7 @@ impl GritApp {
         self.pending_discard = None;
         self.pending_stash_drop = None;
         self.pending_init = None;
+        self.rebase_draft = None;
     }
     fn close_repo_tab(&mut self, path: &Path) {
         if self.operation.is_some() {
@@ -203,6 +205,134 @@ impl GritApp {
         });
         self.notice = format!("{label} in progress…");
         self.operation = Some((label, rx));
+    }
+    fn prepare_interactive_rebase(&mut self, upstream: &str) {
+        if self.operation.is_some() {
+            return;
+        }
+        let Some(repo) = self.repo() else {
+            self.notice = "Open a repository first".into();
+            return;
+        };
+        if !self.changes.is_empty() {
+            self.notice = "Commit or stash working tree changes before rebasing".into();
+            return;
+        }
+        let Ok(branch) = repo.find_branch(upstream, BranchType::Local) else {
+            self.notice = format!("Local branch not found: {upstream}");
+            return;
+        };
+        let Some(upstream_id) = branch.get().target() else {
+            self.notice = format!("Branch has no commit: {upstream}");
+            return;
+        };
+        let mut walk = match repo.revwalk() {
+            Ok(walk) => walk,
+            Err(error) => {
+                self.notice = format!("Could not read commit history: {error}");
+                return;
+            }
+        };
+        if let Err(error) = walk
+            .push_head()
+            .and_then(|()| walk.hide(upstream_id))
+            .and_then(|()| walk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::REVERSE))
+        {
+            self.notice = format!("Could not prepare rebase plan: {error}");
+            return;
+        }
+        let mut lines = Vec::new();
+        for result in walk {
+            let Ok(id) = result else {
+                self.notice = "Could not read all commits for the rebase plan".into();
+                return;
+            };
+            let Ok(commit) = repo.find_commit(id) else {
+                self.notice = format!("Could not read commit {id}");
+                return;
+            };
+            if commit.parent_count() > 1 {
+                self.notice = format!(
+                    "Interactive rebase cannot preserve merge commit {} yet",
+                    &id.to_string()[..7]
+                );
+                return;
+            }
+            let summary = commit.summary().unwrap_or("(no commit message)");
+            lines.push(format!("pick {id} {summary}"));
+        }
+        if lines.is_empty() {
+            self.notice = format!("There are no commits to rebase onto {upstream}");
+            return;
+        }
+        self.rebase_draft = Some((upstream.to_owned(), lines.join("\n")));
+    }
+    fn start_interactive_rebase(&mut self, upstream: &str, todo: &str) {
+        if self.operation.is_some() {
+            return;
+        }
+        let Some(path) = self.path.clone() else {
+            self.notice = "Open a repository first".into();
+            return;
+        };
+        if !self.changes.is_empty() {
+            self.notice = "Commit or stash working tree changes before rebasing".into();
+            return;
+        }
+        let Ok(executable) = std::env::current_exe() else {
+            self.notice = "Could not locate the grit application for the rebase editor".into();
+            return;
+        };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let draft_path =
+            std::env::temp_dir().join(format!("grit-rebase-{}-{stamp}.todo", std::process::id()));
+        if let Err(error) = std::fs::write(&draft_path, todo) {
+            self.notice = format!("Could not save rebase plan: {error}");
+            return;
+        }
+        let editor = format!(
+            "{} --sequence-editor",
+            shell_quote(&executable.to_string_lossy())
+        );
+        let draft_path_for_thread = draft_path.clone();
+        let upstream = upstream.to_owned();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args([
+                    "-c",
+                    "core.editor=true",
+                    "rebase",
+                    "--interactive",
+                    &upstream,
+                ])
+                .env("GIT_SEQUENCE_EDITOR", editor)
+                .env("GRIT_SEQUENCE_DRAFT", draft_path_for_thread)
+                .output()
+                .map_err(|error| error.to_string())
+                .and_then(|output| {
+                    let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                    if output.status.success() {
+                        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+                    } else {
+                        Err(if message.is_empty() {
+                            format!("Git exited with {}", output.status)
+                        } else {
+                            message
+                        })
+                    }
+                });
+            let _ = std::fs::remove_file(draft_path);
+            let _ = tx.send(result);
+        });
+        self.operation = Some(("Interactive rebase".into(), rx));
+        self.rebase_draft = None;
+        self.notice = "Interactive rebase in progress…".into();
     }
     fn clone_repo(&mut self) {
         let url = self.clone_url.trim().to_owned();
@@ -966,6 +1096,52 @@ impl GritApp {
                     });
                 });
         }
+        if let Some((upstream, mut plan)) = self.rebase_draft.clone() {
+            let mut open = true;
+            let mut run = false;
+            let mut cancel = false;
+            egui::Window::new(format!("Interactive rebase onto {upstream}"))
+                .collapsible(false)
+                .resizable(true)
+                .default_width(720.)
+                .open(&mut open)
+                .show(ui.ctx(), |ui| {
+                    ui.label(
+                        RichText::new(
+                            "Reorder lines or change pick to edit, squash, fixup, or drop. Keep a pick/edit commit before squash or fixup.",
+                        )
+                        .color(MUTED),
+                    );
+                    ui.add_space(8.);
+                    ui.add_sized(
+                        [ui.available_width(), 330.],
+                        egui::TextEdit::multiline(&mut plan)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(f32::INFINITY),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            cancel = true;
+                        }
+                        if ui
+                            .add_enabled(!plan.trim().is_empty(), egui::Button::new("Run interactive rebase"))
+                            .clicked()
+                        {
+                            run = true;
+                        }
+                    });
+                });
+            if cancel {
+                open = false;
+            }
+            if run {
+                self.start_interactive_rebase(&upstream, &plan);
+            } else if open {
+                self.rebase_draft = Some((upstream, plan));
+            } else {
+                self.rebase_draft = None;
+            }
+        }
     }
     fn changes_view(&mut self, ui: &mut egui::Ui) {
         if self.path.is_none() {
@@ -1630,6 +1806,18 @@ impl GritApp {
                                 {
                                     self.git_action("Rebase", &["rebase", &b]);
                                 }
+                                if ui
+                                    .add_enabled(
+                                        self.operation.is_none() && self.changes.is_empty(),
+                                        egui::Button::new("Interactive rebase…"),
+                                    )
+                                    .on_hover_text(
+                                        "Edit commit order and choose commits to squash or drop; the working tree must be clean",
+                                    )
+                                    .clicked()
+                                {
+                                    self.prepare_interactive_rebase(&b);
+                                }
                                 if ui.button("Checkout").clicked() {
                                     self.checkout(&b)
                                 }
@@ -1928,6 +2116,16 @@ impl GritApp {
             ui.label(RichText::new(title).size(18.).strong().color(TEXT));
             ui.label(RichText::new(sub).color(MUTED));
         });
+    }
+}
+fn shell_quote(value: &str) -> String {
+    #[cfg(windows)]
+    {
+        format!("\"{}\"", value.replace('"', "\\\""))
+    }
+    #[cfg(not(windows))]
+    {
+        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 fn statuses(r: &Repository) -> Vec<Change> {
@@ -2395,6 +2593,22 @@ impl eframe::App for GritApp {
     }
 }
 fn main() -> eframe::Result<()> {
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() == Some(std::ffi::OsStr::new("--sequence-editor")) {
+        let Some(todo_path) = args.next() else {
+            eprintln!("Git did not provide a rebase todo file");
+            std::process::exit(1);
+        };
+        let Some(draft_path) = std::env::var_os("GRIT_SEQUENCE_DRAFT") else {
+            eprintln!("The grit rebase plan is unavailable");
+            std::process::exit(1);
+        };
+        if let Err(error) = std::fs::copy(draft_path, todo_path) {
+            eprintln!("Could not apply the grit rebase plan: {error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1320., 860.])
