@@ -69,6 +69,7 @@ struct GritApp {
     open_after_operation: Option<PathBuf>,
     aux_output: String,
     pending_discard: Option<String>,
+    pending_stash_drop: Option<usize>,
     conflict_draft: Option<(String, String)>,
     patch_draft: Option<(String, String)>,
 }
@@ -138,6 +139,8 @@ impl GritApp {
         self.aux_output.clear();
         self.conflict_draft = None;
         self.patch_draft = None;
+        self.pending_discard = None;
+        self.pending_stash_drop = None;
     }
     fn close_repo_tab(&mut self, path: &Path) {
         if self.operation.is_some() {
@@ -883,6 +886,37 @@ impl GritApp {
                     });
                 });
         }
+        if let Some(index) = self.pending_stash_drop {
+            egui::Window::new("Drop stash?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "Permanently drop stash@{{{index}}}? This cannot be undone."
+                        ))
+                        .color(TEXT),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.pending_stash_drop = None;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("Drop stash").color(Color32::WHITE).strong(),
+                                )
+                                .fill(Color32::from_rgb(161, 62, 69)),
+                            )
+                            .clicked()
+                        {
+                            self.pending_stash_drop = None;
+                            let reference = format!("stash@{{{index}}}");
+                            self.git_action("Drop stash", &["stash", "drop", &reference]);
+                        }
+                    });
+                });
+        }
     }
     fn changes_view(&mut self, ui: &mut egui::Ui) {
         if self.path.is_none() {
@@ -1107,11 +1141,14 @@ impl GritApp {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(message).color(TEXT));
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    if ui.small_button("Drop").clicked() {
-                                        self.git_action(
-                                            "Drop stash",
-                                            &["stash", "drop", &reference],
-                                        );
+                                    if ui
+                                        .add_enabled(
+                                            self.operation.is_none(),
+                                            egui::Button::new("Drop"),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.pending_stash_drop = Some(index);
                                     }
                                     if ui.small_button("Pop").clicked() {
                                         self.git_action(
