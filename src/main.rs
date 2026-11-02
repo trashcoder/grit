@@ -27,6 +27,7 @@ struct Change {
 #[derive(Clone)]
 struct Commit {
     id: String,
+    parents: Vec<String>,
     short: String,
     message: String,
     author: String,
@@ -1093,6 +1094,15 @@ impl GritApp {
             })
             .cloned()
             .collect();
+        let graph = graph_layout(&rows);
+        let graph_width = graph
+            .iter()
+            .map(|row| row.before.len().max(row.after.len()))
+            .max()
+            .unwrap_or(1)
+            .max(1) as f32
+            * 16.
+            + 8.;
         let mut picked = None;
         egui::Frame::new()
             .fill(PANEL)
@@ -1104,23 +1114,11 @@ impl GritApp {
                     for i in visible {
                         let c = &rows[i];
                         ui.horizontal(|ui| {
-                            let (rect, _) =
-                                ui.allocate_exact_size(egui::vec2(24., 32.), egui::Sense::hover());
-                            let x = rect.center().x;
-                            let p = ui.painter();
-                            if i > 0 {
-                                p.line_segment(
-                                    [egui::pos2(x, rect.top()), rect.center()],
-                                    Stroke::new(2., BLUE),
-                                );
-                            }
-                            if i + 1 < rows.len() {
-                                p.line_segment(
-                                    [rect.center(), egui::pos2(x, rect.bottom())],
-                                    Stroke::new(2., BLUE),
-                                );
-                            }
-                            p.circle_filled(rect.center(), 5., BLUE);
+                            let (rect, _) = ui.allocate_exact_size(
+                                egui::vec2(graph_width, 32.),
+                                egui::Sense::hover(),
+                            );
+                            draw_graph_row(ui.painter(), rect, &graph[i]);
                             if ui
                                 .selectable_label(
                                     self.selected_commit.as_deref() == Some(&c.id),
@@ -1590,14 +1588,17 @@ fn history(r: &Repository) -> Vec<Commit> {
     let Ok(mut w) = r.revwalk() else {
         return vec![];
     };
+    let _ = w.push_glob("refs/heads/*");
+    let _ = w.push_glob("refs/remotes/*");
+    let _ = w.push_glob("refs/tags/*");
     let _ = w.push_head();
     let _ = w.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL);
     let mut reference_names: HashMap<git2::Oid, Vec<String>> = HashMap::new();
     if let Ok(references) = r.references() {
         for reference in references.flatten() {
-            if let (Some(target), Some(name)) = (reference.target(), reference.shorthand()) {
+            if let (Ok(commit), Some(name)) = (reference.peel_to_commit(), reference.shorthand()) {
                 reference_names
-                    .entry(target)
+                    .entry(commit.id())
                     .or_default()
                     .push(name.to_owned());
             }
@@ -1611,8 +1612,10 @@ fn history(r: &Repository) -> Vec<Commit> {
                 .unwrap_or_default();
             let refs = reference_names.get(&id).cloned().unwrap_or_default();
             let oid = id.to_string();
+            let parents = c.parent_ids().map(|parent| parent.to_string()).collect();
             Some(Commit {
                 id: oid.clone(),
+                parents,
                 short: oid[..7].into(),
                 message: c.summary().unwrap_or("(no message)").into(),
                 author: c.author().name().unwrap_or("Unknown").into(),
@@ -1621,6 +1624,111 @@ fn history(r: &Repository) -> Vec<Commit> {
             })
         })
         .collect()
+}
+#[derive(Default)]
+struct GraphRow {
+    lane: usize,
+    parents: Vec<usize>,
+    before: Vec<Option<String>>,
+    after: Vec<Option<String>>,
+}
+fn graph_layout(commits: &[Commit]) -> Vec<GraphRow> {
+    let mut lanes: Vec<Option<String>> = Vec::new();
+    let mut rows = Vec::with_capacity(commits.len());
+    for commit in commits {
+        let lane = if let Some(index) = lanes
+            .iter()
+            .position(|entry| entry.as_deref() == Some(&commit.id))
+        {
+            index
+        } else if let Some(index) = lanes.iter().position(Option::is_none) {
+            lanes[index] = Some(commit.id.clone());
+            index
+        } else {
+            lanes.push(Some(commit.id.clone()));
+            lanes.len() - 1
+        };
+        let before = lanes.clone();
+        lanes[lane] = None;
+        let mut parents = Vec::with_capacity(commit.parents.len());
+        for (parent_index, parent) in commit.parents.iter().enumerate() {
+            let parent_lane = if let Some(index) = lanes
+                .iter()
+                .position(|entry| entry.as_deref() == Some(parent))
+            {
+                index
+            } else if parent_index == 0 {
+                lane
+            } else if let Some(index) = lanes.iter().position(Option::is_none) {
+                index
+            } else {
+                lanes.push(None);
+                lanes.len() - 1
+            };
+            lanes[parent_lane] = Some(parent.clone());
+            parents.push(parent_lane);
+        }
+        rows.push(GraphRow {
+            lane,
+            parents,
+            before,
+            after: lanes.clone(),
+        });
+    }
+    rows
+}
+fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
+    const COLORS: [Color32; 6] = [
+        BLUE,
+        GREEN,
+        Color32::from_rgb(229, 158, 91),
+        Color32::from_rgb(196, 132, 230),
+        Color32::from_rgb(92, 197, 205),
+        Color32::from_rgb(237, 119, 141),
+    ];
+    let x_for = |lane: usize| rect.left() + 8. + lane as f32 * 16.;
+    let center_y = rect.center().y;
+    let width = row.before.len().max(row.after.len());
+    for lane in 0..width {
+        let x = x_for(lane);
+        let color = COLORS[lane % COLORS.len()];
+        if lane == row.lane {
+            painter.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, center_y)],
+                Stroke::new(2., color),
+            );
+            if row.parents.contains(&lane) {
+                painter.line_segment(
+                    [egui::pos2(x, center_y), egui::pos2(x, rect.bottom())],
+                    Stroke::new(2., color),
+                );
+            }
+        } else if row.parents.contains(&lane) {
+            painter.line_segment(
+                [
+                    egui::pos2(x_for(row.lane), center_y),
+                    egui::pos2(x, center_y),
+                ],
+                Stroke::new(2., color),
+            );
+            painter.line_segment(
+                [egui::pos2(x, center_y), egui::pos2(x, rect.bottom())],
+                Stroke::new(2., color),
+            );
+        } else if row.before.get(lane).is_some_and(Option::is_some)
+            || row.after.get(lane).is_some_and(Option::is_some)
+        {
+            painter.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                Stroke::new(2., color),
+            );
+        }
+    }
+    painter.circle_filled(
+        egui::pos2(x_for(row.lane), center_y),
+        5.,
+        COLORS[row.lane % COLORS.len()],
+    );
 }
 fn diff_file(r: &Repository, path: &str) -> String {
     let mut out = String::new();
