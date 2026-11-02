@@ -39,6 +39,7 @@ struct GritApp {
     recent_repos: Vec<PathBuf>,
     commits: Vec<Commit>,
     changes: Vec<Change>,
+    stashes: Vec<(usize, String)>,
     branches: Vec<String>,
     remote_branches: Vec<String>,
     tags: Vec<String>,
@@ -164,7 +165,7 @@ impl GritApp {
         self.notice = "Clone in progress…".into();
     }
     fn refresh(&mut self) {
-        let Some(repo) = self.repo() else { return };
+        let Some(mut repo) = self.repo() else { return };
         self.branch = repo
             .head()
             .ok()
@@ -197,6 +198,11 @@ impl GritApp {
             .collect();
         self.changes = statuses(&repo);
         self.commits = history(&repo);
+        self.stashes.clear();
+        let _ = repo.stash_foreach(|index, message, _| {
+            self.stashes.push((index, message.to_owned()));
+            true
+        });
         if let Some(id) = self.selected_commit.clone() {
             self.diff = diff_commit(&repo, &id)
         } else if let Some(path) = self.changes.first().map(|c| c.path.clone()) {
@@ -504,12 +510,15 @@ impl GritApp {
                 .strong()
                 .color(TEXT),
             );
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.add_sized(
-                    [190., 26.],
-                    egui::TextEdit::singleline(&mut self.search).hint_text("⌕  Filter commits…"),
-                );
-            });
+            if self.tab == 1 {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_sized(
+                        [190., 26.],
+                        egui::TextEdit::singleline(&mut self.search)
+                            .hint_text("⌕  Filter commits…"),
+                    );
+                });
+            }
         });
         ui.add_space(10.);
         match self.tab {
@@ -631,6 +640,43 @@ impl GritApp {
                         });
                     });
                 }
+            });
+        egui::CollapsingHeader::new(format!("Stashes ({})", self.stashes.len()))
+            .default_open(false)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(150.)
+                    .show(ui, |ui| {
+                        for (index, message) in self.stashes.clone() {
+                            let reference = format!("stash@{{{index}}}");
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(message).color(TEXT));
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui.small_button("Drop").clicked() {
+                                        self.git_action(
+                                            "Drop stash",
+                                            &["stash", "drop", &reference],
+                                        );
+                                    }
+                                    if ui.small_button("Pop").clicked() {
+                                        self.git_action(
+                                            "Pop stash",
+                                            &["stash", "pop", "--index", &reference],
+                                        );
+                                    }
+                                    if ui.small_button("Apply").clicked() {
+                                        self.git_action(
+                                            "Apply stash",
+                                            &["stash", "apply", "--index", &reference],
+                                        );
+                                    }
+                                });
+                            });
+                        }
+                        if self.stashes.is_empty() {
+                            ui.label(RichText::new("No saved stashes").small().color(MUTED));
+                        }
+                    });
             });
         ui.add_space(10.);
         egui::Frame::new()
