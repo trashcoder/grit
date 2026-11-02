@@ -12,7 +12,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 - Edit an interactive rebase plan to reorder, squash, fix up, or drop commits
 - Create and safely delete local branches
 - Create lightweight tags
-- Configure remotes, fetch, pull (fast-forward only), and push
+- Configure remotes, fetch, pull (fast-forward only), push, and publish new branches with upstream tracking
 - Review working tree changes and unified diffs
 - Stage and unstage files
 - Stage individual diff hunks
