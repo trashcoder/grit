@@ -59,6 +59,7 @@ struct GritApp {
     operation: Option<(String, Receiver<Result<String, String>>)>,
     open_after_operation: Option<PathBuf>,
     aux_output: String,
+    pending_discard: Option<String>,
 }
 impl GritApp {
     fn repo(&self) -> Option<Repository> {
@@ -229,6 +230,30 @@ impl GritApp {
                 Err(e) => self.notice = e.to_string(),
             }
             self.refresh()
+        }
+    }
+    fn discard(&mut self, path: &str) {
+        let Some(repo) = self.repo() else { return };
+        let status = repo.status_file(Path::new(path)).unwrap_or(Status::CURRENT);
+        let index_bits = Status::INDEX_NEW
+            | Status::INDEX_MODIFIED
+            | Status::INDEX_DELETED
+            | Status::INDEX_RENAMED
+            | Status::INDEX_TYPECHANGE;
+        if status.contains(Status::WT_NEW) && !status.intersects(index_bits) {
+            self.git_action("Discard untracked file", &["clean", "-f", "--", path]);
+        } else {
+            self.git_action(
+                "Discard changes",
+                &[
+                    "restore",
+                    "--source=HEAD",
+                    "--staged",
+                    "--worktree",
+                    "--",
+                    path,
+                ],
+            );
         }
     }
     fn commit(&mut self) {
@@ -475,6 +500,36 @@ impl GritApp {
             4 => self.blame_view(ui),
             _ => self.changes_view(ui),
         }
+        if let Some(path) = self.pending_discard.clone() {
+            egui::Window::new("Discard changes?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "Discard uncommitted changes to {path}? This cannot be undone."
+                        ))
+                        .color(TEXT),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.pending_discard = None;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("Discard").color(Color32::WHITE).strong(),
+                                )
+                                .fill(Color32::from_rgb(161, 62, 69)),
+                            )
+                            .clicked()
+                        {
+                            self.pending_discard = None;
+                            self.discard(&path);
+                        }
+                    });
+                });
+        }
     }
     fn changes_view(&mut self, ui: &mut egui::Ui) {
         if self.path.is_none() {
@@ -550,6 +605,9 @@ impl GritApp {
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui.small_button(if c.staged { "−" } else { "+" }).clicked() {
                                 self.stage(&c.path, c.staged)
+                            }
+                            if !c.staged && ui.small_button("Discard").clicked() {
+                                self.pending_discard = Some(c.path.clone());
                             }
                         });
                     });
