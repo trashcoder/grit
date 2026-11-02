@@ -5,7 +5,7 @@ A native Rust Git client inspired by GittyUp's focus on understanding repository
 ## Features
 
 - Open a local Git repository
-- Keep multiple repositories open in persistent tabs
+- Switch among multiple open and recently used repositories from the sidebar
 - Initialize a repository or clone one from HTTPS/SSH
 - Browse local branches and check them out
 - Rebase the current branch onto another local branch and continue or abort after conflicts
