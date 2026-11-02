@@ -70,6 +70,7 @@ struct GritApp {
     aux_output: String,
     pending_discard: Option<String>,
     pending_stash_drop: Option<usize>,
+    pending_init: Option<PathBuf>,
     conflict_draft: Option<(String, String)>,
     patch_draft: Option<(String, String)>,
 }
@@ -87,6 +88,7 @@ impl GritApp {
         if self.operation.is_some() {
             return;
         }
+        self.pending_init = None;
         match Repository::open(&p) {
             Ok(r) => {
                 let opened_path = r.workdir().unwrap_or(&p).to_path_buf();
@@ -103,6 +105,10 @@ impl GritApp {
                 self.tab = 1;
                 self.notice = "Repository loaded".into();
                 self.refresh();
+            }
+            Err(error) if error.code() == git2::ErrorCode::NotFound => {
+                self.notice = "This folder is not a Git repository".into();
+                self.pending_init = Some(p);
             }
             Err(e) => self.notice = format!("Could not open repository: {e}"),
         }
@@ -141,6 +147,7 @@ impl GritApp {
         self.patch_draft = None;
         self.pending_discard = None;
         self.pending_stash_drop = None;
+        self.pending_init = None;
     }
     fn close_repo_tab(&mut self, path: &Path) {
         if self.operation.is_some() {
@@ -923,6 +930,29 @@ impl GritApp {
                             self.pending_stash_drop = None;
                             let reference = format!("stash@{{{index}}}");
                             self.git_action("Drop stash", &["stash", "drop", &reference]);
+                        }
+                    });
+                });
+        }
+        if let Some(path) = self.pending_init.clone() {
+            egui::Window::new("Initialize Git repository?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ui.ctx(), |ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "No Git repository was found in {}. Initialize one there? Existing files will stay in place.",
+                            path.display()
+                        ))
+                        .color(TEXT),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.pending_init = None;
+                        }
+                        if ui.button("Initialize repository").clicked() {
+                            self.pending_init = None;
+                            self.init_repository(path);
                         }
                     });
                 });
