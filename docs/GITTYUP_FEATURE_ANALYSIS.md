@@ -128,8 +128,8 @@ Quelle: `RemoteDialog.cpp`, `ConfigDialog.cpp`, `UpdateSubmodulesDialog.cpp`, `R
 | Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Authentifizierung, Accountbindung und Browser/API-Integration erforderlich |
 | Submodule ansehen, initialisieren, aktualisieren, öffnen | Fehlt | Luna-Repositorypaket; rekursive Updates explizit |
 | Git LFS initialisieren, Tracking, Locks, Settings | Fehlt | Eigenes Paket; `git-lfs` muss vorhanden sein; nicht als allgemeine Git-Funktion vortäuschen |
-| Worktrees und Bare-Repositories | libgit2 zum Teil vorhanden | Eigene Abnahmefälle; keine vollständige Verwaltungs-UI |
-| SHA-256-Repositories | Nicht verifiziert | Nicht aus GittyUps Changelog auf git2-Rust-Unterstützung schließen |
+| Worktrees und Bare-Repositories | libgit2 zum Teil vorhanden | Runde 3: Worktree-Verwaltung mit Create/Open/Remove/Prune; Bare-History geprüft |
+| SHA-256-Repositories | Nicht verifiziert | Explizite Erkennung und verständliche Ablehnung; native libgit2-Unterstützung bleibt offen |
 | Asynchroner Suchindex, Lexer, Dateiwächter | Fehlt | Architekturpaket, getrennt von GUI-Neugestaltung |
 
 ## Konkrete Agentenpakete
@@ -267,3 +267,9 @@ Luna-Paket `preview_features`: Changes und Commit-Diff zeigen alte/neue Bildvers
 Textansichten bieten UTF-8, Latin-1, Windows-1252 und UTF-16LE/BE, einschließlich BOM-Erkennung. Dekodierfehler bleiben sichtbar. Alternative Diffencodings zeigen eine schreibgeschützte Old/New-Vorschau bis 4 MiB pro Seite; selektives Textstaging steht dort nicht zur Verfügung. Rohpatches werden nicht umkodiert.
 
 Abnahme: Drei Tests prüfen alle Encodings, ungültige UTF-Sequenzen, echte Repository-Versionen (Root/Add/Delete, Working/Index/Historie), Traversal und Bildgrößenlimits. Gesamtstand nach Integration: 84 Tests grün.
+
+### Linked Worktrees und Bare-Repositories
+
+Luna-Paket `worktree_features`: Repository Tools listet Worktrees anhand des NUL-getrennten Git-Porcelainformats, inklusive Leerzeichen/Unicode-Pfaden, Branch/Detached/Bare/Lock/Prunable-Status. Neue Worktrees erhalten einen neuen Branch am ausgewählten Commit oder HEAD. Öffnen wechselt tatsächlich das aktive Repository. Entfernen braucht Bestätigung und verwendet niemals Force; schmutzige oder gesperrte Worktrees verweigert Git. Prune bietet Vorschau und separate Bestätigung.
+
+Abnahme: Vier Tests prüfen echten Create/List/Remove-Verlauf, verweigertes Entfernen bei Änderungen, Detached-Einträge sowie Bare-History und Worktreeverwaltung. SHA-256-Repositories werden über System-Git erkannt und beim Öffnen verständlich als vom libgit2-Backend nicht unterstützt gemeldet. Dies ist ausdrücklich keine SHA-256-Featureparität; dafür ist ein zusätzlicher Git-Backendpfad oder passende Bibliotheksunterstützung notwendig.

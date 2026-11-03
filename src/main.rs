@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    worktree_tools: worktree_features::WorktreeTools,
     preview_tools: preview_features::PreviewTools,
     external_diff: external_diff_features::ExternalDiffTools,
     stash_tools: stash_features::StashTools,
@@ -158,6 +159,9 @@ impl GritApp {
                 }
                 self.refresh();
             }
+            Err(_) if worktree_features::sha256_repository_message(&p).is_some() => {
+                self.notice = worktree_features::sha256_repository_message(&p).unwrap();
+            }
             Err(error) if error.code() == git2::ErrorCode::NotFound => {
                 self.notice = "This folder is not a Git repository".into();
                 self.pending_init = Some(p);
@@ -197,6 +201,7 @@ impl GritApp {
         self.reset_tools = Default::default();
         self.metadata_tools = Default::default();
         self.stash_tools = Default::default();
+        self.worktree_tools = Default::default();
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -3202,6 +3207,7 @@ mod tests;
 mod tree_features;
 mod ui;
 mod watcher_features;
+mod worktree_features;
 
 fn main() -> eframe::Result<()> {
     let mut args = std::env::args_os().skip(1);

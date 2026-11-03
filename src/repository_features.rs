@@ -130,6 +130,7 @@ impl GritApp {
             ui.colored_label(Color32::YELLOW, error);
         }
         self.reset_tools_ui(ui);
+        self.worktree_tools_ui(ui);
         egui::CollapsingHeader::new("Stash options").show(ui, |ui| self.stash_options_ui(ui));
         if self.path.is_none() {
             ui.label("Open a repository to use these tools.");
