@@ -48,6 +48,7 @@ struct CommitFile {
 #[derive(Default)]
 struct GritApp {
     worktree_tools: worktree_features::WorktreeTools,
+    code_search: code_search_features::CodeSearchTools,
     preview_tools: preview_features::PreviewTools,
     external_diff: external_diff_features::ExternalDiffTools,
     stash_tools: stash_features::StashTools,
@@ -194,6 +195,7 @@ impl GritApp {
         }
     }
     fn reset_repo_selection(&mut self) {
+        self.code_search.cancel_for_repo_change(None);
         self.selected_commit = None;
         self.display_diff_key = None;
         self.blame_state = Default::default();
@@ -1199,6 +1201,12 @@ impl GritApp {
             self.tab = 8;
         }
         ui.add_space(14.);
+        if ui
+            .selectable_label(self.tab == 9, "Code & diff search")
+            .clicked()
+        {
+            self.tab = 9;
+        }
         egui::CollapsingHeader::new(RichText::new("LOCAL BRANCHES").small().color(MUTED))
             .default_open(true)
             .show(ui, |ui| {
@@ -1294,6 +1302,7 @@ impl GritApp {
                     4 => "Blame",
                     5 => "Files",
                     6 => "Repository tools",
+                    9 => "Code search",
                     7 => "File history",
                     8 => "LFS and external tools",
                     _ => "Changes",
@@ -1369,6 +1378,7 @@ impl GritApp {
             6 => {
                 egui::ScrollArea::both().show(ui, |ui| self.repository_tools_view(ui));
             }
+            9 => self.code_search_ui(ui),
             7 => self.file_history_view(ui),
             8 => {
                 egui::ScrollArea::both().show(ui, |ui| self.integrations_view(ui));
@@ -3189,6 +3199,7 @@ impl eframe::App for GritApp {
     }
 }
 mod blame_features;
+mod code_search_features;
 mod commit_features;
 mod diff_features;
 mod diff_preferences;

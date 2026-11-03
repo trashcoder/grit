@@ -60,9 +60,9 @@ Quelle: `CommitList.cpp`, `CommitToolBar.cpp`, `AdvancedSearchWidget.cpp`, `Hist
 | Nachricht und Autor suchen | Vorhanden | SHA und E-Mail zusätzlich durchsuchen |
 | Felder `author`, `email`, `message`, `date`, `after`, `before` | Fehlt | Validierte strukturierte Filter; ISO-Datumsgrenzen inklusiv |
 | Dateiname/Pfad im Commit suchen | Fehlt | Exakter Dateipfadfilter ohne Shell-/Pathspec-Interpretation |
-| Diff-Kontext, Ergänzungen, Löschungen, Hunk-Scope durchsuchen | Fehlt | Separater Ausbau; nicht als vorhandene Volltextsuche ausgeben |
-| Kommentare, String-Literale, Identifier durchsuchen | Fehlt | GittyUps Lexer/Index besitzt dafür eigene Infrastruktur; Rust-Indexer offen |
-| Suchvorschläge, Query-Sprache mit Gruppierung | Fehlt | Nicht mit einfachem Substring-Suchfeld gleichsetzen |
+| Diff-Kontext, Ergänzungen, Löschungen, Hunk-Scope durchsuchen | Fehlt | Runde 3: eigener asynchroner Diffindex mit Addition/Deletion/Context/Hunk-Feldern |
+| Kommentare, String-Literale, Identifier durchsuchen | Fehlt | Runde 3: begrenzter Rust-Index mit explizit heuristischen Lexikfeldern |
+| Suchvorschläge, Query-Sprache mit Gruppierung | Fehlt | Runde 3: eigene AND/OR/NOT-Klammergrammatik, Quotes und Feldvorschläge |
 | Commit komplett lesen, Autor und Committer unterscheiden | Nur Summary und Autor | Vollständige Message/E-Mail/Committer/Eltern ergänzen |
 | Dateiversionen/Dateiverlauf und vorherige/nächste Revision | Nur aktueller Text/Blame | Luna-Dateiversionspaket |
 | Blame mit integrierter Timeline | Nur `git blame`-Text | Interaktive Attribution/Commitliste in Runde 2; Heatmap bleibt offen |
@@ -273,3 +273,11 @@ Abnahme: Drei Tests prüfen alle Encodings, ungültige UTF-Sequenzen, echte Repo
 Luna-Paket `worktree_features`: Repository Tools listet Worktrees anhand des NUL-getrennten Git-Porcelainformats, inklusive Leerzeichen/Unicode-Pfaden, Branch/Detached/Bare/Lock/Prunable-Status. Neue Worktrees erhalten einen neuen Branch am ausgewählten Commit oder HEAD. Öffnen wechselt tatsächlich das aktive Repository. Entfernen braucht Bestätigung und verwendet niemals Force; schmutzige oder gesperrte Worktrees verweigert Git. Prune bietet Vorschau und separate Bestätigung.
 
 Abnahme: Vier Tests prüfen echten Create/List/Remove-Verlauf, verweigertes Entfernen bei Änderungen, Detached-Einträge sowie Bare-History und Worktreeverwaltung. SHA-256-Repositories werden über System-Git erkannt und beim Öffnen verständlich als vom libgit2-Backend nicht unterstützt gemeldet. Dies ist ausdrücklich keine SHA-256-Featureparität; dafür ist ein zusätzlicher Git-Backendpfad oder passende Bibliotheksunterstützung notwendig.
+
+### Asynchrone Code-/Diffsuche und boolesche Query-Sprache
+
+Luna-Paket `code_search_features`: Die separate Ansicht „Code & diff search“ baut auf ausdrücklichen Aufruf einen lokalen Index aus lokalen/Remote-Branches, Tags und detached HEAD. Suchfelder: `addition`, `deletion`, `context`, `hunk`, `comment`, `string`, `identifier`, `path`, `message`, `author`. Unterstützt werden AND/OR/NOT (Priorität NOT > AND > OR), implizites AND, Klammern, Quotes und Escapes. Feldbuttons ergänzen Query-Vorschläge. Treffer öffnen echten Commit und Datei. Index und Suche laufen in einem Worker; Repositorygeneration und Querysequenz verhindern veraltete Ergebnisse.
+
+Grenzen werden in der UI angezeigt: maximal 2.000 Commits, 120.000 Diffzeilen, konservativ 32 MiB Textbudget und 3.000 Treffer. Merge-Diffs beziehen sich auf den ersten Parent. Lexikfelder nutzen Heuristiken für Rust/C/C++/JS/TS/Python und weitere einfache Kommentarformen, keinen vollständigen Sprachparser; unbekannter Code außerhalb eines Hunks kann den Lexikzustand beeinflussen. Alter/neuer Zustand werden getrennt pro Hunk geführt. Working tree ist nicht Bestandteil des Historyindexes.
+
+Abnahme: Zehn Tests prüfen Parserpriorität/Klammern/Fehler/quoted Operatorliterale, tatsächliche Add/Delete/Context/Hunk-Treffer, Strings/Kommentare/Identifier, Mehrzeilenheuristik, Branch-only-Historie, unborn Repositories, große Einzelzeilen und Worker-Cancel/Query-Coalescing.
