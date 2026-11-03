@@ -391,7 +391,7 @@ pub(crate) fn selected_patch(
             }
             let start_old = if reverse { ns } else { os };
             let (old_count, new_count) = (old, new);
-            let target_start = if reverse {
+            let mut target_start = if reverse {
                 start_old as isize + selected_cumulative_delta
             } else {
                 ns as isize + selected_cumulative_delta
@@ -399,6 +399,12 @@ pub(crate) fn selected_patch(
                         - (source_new_count as isize - source_old_count as isize))
             }
             .max(0) as usize;
+            // A zero-old-count hunk addresses the line immediately before its
+            // insertion point in Git's patch format. Reversed staged deletions
+            // become such insertions, so use the following line as new-side start.
+            if reverse && old_count == 0 && new_count > 0 {
+                target_start += 1;
+            }
             let header = format!(
                 "@@ -{} +{} @@",
                 count_suffix(start_old, old_count),
@@ -688,6 +694,46 @@ mod tests {
         ]);
         apply_selected(&r, &p, one(&p, '-', 1), true);
         assert_eq!(r.index("f"), "head\ntwo\ntail\n");
+    }
+    #[test]
+    fn reverse_unstage_context_zero_deletions_across_multiple_hunks() {
+        let r = Repo::new();
+        let original = (1..=20)
+            .map(|line| format!("line-{line}\n"))
+            .collect::<String>();
+        r.commit_file("f", &original);
+        let worktree = (1..=20)
+            .filter(|line| ![2, 12, 19].contains(line))
+            .map(|line| format!("line-{line}\n"))
+            .collect::<String>();
+        fs::write(r.0.join("f"), &worktree).unwrap();
+        r.git(&["add", "f"]);
+        let patch = r.patch(&[
+            "diff",
+            "--cached",
+            "--no-ext-diff",
+            "--unified=0",
+            "--",
+            "f",
+        ]);
+        let deletions = patch
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| line.starts_with('-') && !line.starts_with("--- "))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(deletions.len(), 3);
+        let inverse =
+            selected_patch(&patch, &HashSet::from([deletions[0], deletions[2]]), true).unwrap();
+        assert_eq!(inverse.matches("@@ -").count(), 2, "{inverse}");
+        r.apply(&inverse, true);
+        r.apply(&inverse, false);
+        let expected_index = (1..=20)
+            .filter(|line| *line != 12)
+            .map(|line| format!("line-{line}\n"))
+            .collect::<String>();
+        assert_eq!(r.index("f"), expected_index);
+        assert_eq!(fs::read_to_string(r.0.join("f")).unwrap(), worktree);
     }
     #[test]
     fn new_file_partial_stage_and_unstage_keeps_file() {

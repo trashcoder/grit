@@ -84,11 +84,7 @@ fn prepare_discard(
             "The file changed since the diff was shown. Refresh and select lines again.".into(),
         );
     }
-    let reverse_patch = correct_zero_count_reverse_hunks(&diff_features::selected_patch(
-        display_diff,
-        selected_lines,
-        true,
-    )?);
+    let reverse_patch = diff_features::selected_patch(display_diff, selected_lines, true)?;
     if reverse_patch.is_empty() {
         return Err("The selected patch contains no changes.".into());
     }
@@ -102,61 +98,6 @@ fn prepare_discard(
         index_state: index_state(repo, path)?,
         head: head_state(repo),
     })
-}
-
-fn correct_zero_count_reverse_hunks(patch: &str) -> String {
-    let mut corrected = String::with_capacity(patch.len());
-    for segment in patch.split_inclusive('\n') {
-        let (line, eol) = segment
-            .strip_suffix('\n')
-            .map(|line| (line, "\n"))
-            .unwrap_or((segment, ""));
-        let adjusted = if let Some(header) = line.strip_prefix("@@ -") {
-            let parsed = header.split_once(' ').and_then(|(old_range, rest)| {
-                rest.strip_prefix('+')
-                    .and_then(|rest| rest.split_once(" @@"))
-                    .map(|(new_range, suffix)| (old_range, new_range, suffix))
-            });
-            if let Some((old_range, new_range, suffix)) = parsed {
-                let old_count = old_range
-                    .split_once(',')
-                    .and_then(|(_, count)| count.parse::<usize>().ok())
-                    .unwrap_or(1);
-                let new_count = new_range
-                    .split_once(',')
-                    .and_then(|(_, count)| count.parse::<usize>().ok())
-                    .unwrap_or(1);
-                let new_start = new_range
-                    .split_once(',')
-                    .map(|(start, _)| start)
-                    .unwrap_or(new_range)
-                    .parse::<usize>()
-                    .ok();
-                if old_count == 0
-                    && new_count > 0
-                    && let Some(new_start) = new_start
-                {
-                    let suffix_count = new_range
-                        .split_once(',')
-                        .map(|(_, count)| format!(",{count}"))
-                        .unwrap_or_default();
-                    format!(
-                        "@@ -{old_range} +{}{suffix_count} @@{suffix}",
-                        new_start + 1
-                    )
-                } else {
-                    line.to_owned()
-                }
-            } else {
-                line.to_owned()
-            }
-        } else {
-            line.to_owned()
-        };
-        corrected.push_str(&adjusted);
-        corrected.push_str(eol);
-    }
-    corrected
 }
 
 fn validate_discard_snapshot(
