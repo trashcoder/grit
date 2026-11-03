@@ -224,10 +224,9 @@ impl GritApp {
             if ui
                 .add_enabled(preview.is_ok(), egui::Button::new("Create stash"))
                 .clicked()
+                && let Ok(args) = preview
             {
-                if let Ok(args) = preview {
-                    self.start_git_command("Create stash", args);
-                }
+                self.start_git_command("Create stash", args);
             }
         });
 
@@ -259,19 +258,17 @@ impl GritApp {
                         if ui
                             .selectable_label(is_selected, format!("stash@{{{index}}}: {message}"))
                             .clicked()
+                            && let (Some(repo), Some(repo_path)) = (self.repo(), self.path.clone())
                         {
-                            if let (Some(repo), Some(repo_path)) = (self.repo(), self.path.clone())
-                            {
-                                match stash_oid(&repo, index) {
-                                    Ok(oid) => {
-                                        self.stash_tools.selected_stash = Some(SelectedStash {
-                                            repo_path,
-                                            index,
-                                            oid,
-                                        })
-                                    }
-                                    Err(error) => self.notice = error,
+                            match stash_oid(&repo, index) {
+                                Ok(oid) => {
+                                    self.stash_tools.selected_stash = Some(SelectedStash {
+                                        repo_path,
+                                        index,
+                                        oid,
+                                    })
                                 }
+                                Err(error) => self.notice = error,
                             }
                         }
                     }
@@ -288,40 +285,39 @@ impl GritApp {
                 if ui
                     .add_enabled(enabled, egui::Button::new("Apply"))
                     .clicked()
-                {
-                    if let (Some(repo), Some(path), Some(stash)) = (
+                    && let (Some(repo), Some(path), Some(stash)) = (
                         selected_repo.as_ref(),
                         repo_path.as_deref(),
                         selected.as_ref(),
+                    )
+                {
+                    match validated_stash_action(
+                        repo,
+                        path,
+                        stash,
+                        "apply",
+                        self.stash_tools.restore_index,
                     ) {
-                        match validated_stash_action(
-                            repo,
-                            path,
-                            stash,
-                            "apply",
-                            self.stash_tools.restore_index,
-                        ) {
-                            Ok(args) => self.start_git_command("Apply stash", args),
-                            Err(error) => self.notice = error,
-                        }
+                        Ok(args) => self.start_git_command("Apply stash", args),
+                        Err(error) => self.notice = error,
                     }
                 }
-                if ui.add_enabled(enabled, egui::Button::new("Pop")).clicked() {
-                    if let (Some(repo), Some(path), Some(stash)) = (
+                if ui.add_enabled(enabled, egui::Button::new("Pop")).clicked()
+                    && let (Some(repo), Some(path), Some(stash)) = (
                         selected_repo.as_ref(),
                         repo_path.as_deref(),
                         selected.as_ref(),
+                    )
+                {
+                    match validated_stash_action(
+                        repo,
+                        path,
+                        stash,
+                        "pop",
+                        self.stash_tools.restore_index,
                     ) {
-                        match validated_stash_action(
-                            repo,
-                            path,
-                            stash,
-                            "pop",
-                            self.stash_tools.restore_index,
-                        ) {
-                            Ok(args) => self.start_git_command("Pop stash", args),
-                            Err(error) => self.notice = error,
-                        }
+                        Ok(args) => self.start_git_command("Pop stash", args),
+                        Err(error) => self.notice = error,
                     }
                 }
                 if ui
