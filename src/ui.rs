@@ -3,17 +3,17 @@ use super::*;
 pub(super) fn configure_style(ctx: &egui::Context) {
     let mut style = (*ctx.style()).clone();
     style.visuals = egui::Visuals::dark();
-    style.visuals.panel_fill = PANEL;
-    style.visuals.window_fill = PANEL2;
-    style.visuals.extreme_bg_color = BG;
-    style.visuals.faint_bg_color = PANEL2;
-    style.visuals.override_text_color = Some(TEXT);
+    style.visuals.panel_fill = panel();
+    style.visuals.window_fill = panel2();
+    style.visuals.extreme_bg_color = bg();
+    style.visuals.faint_bg_color = panel2();
+    style.visuals.override_text_color = Some(text());
     style.visuals.selection.bg_fill = Color32::from_rgb(44, 77, 108);
-    style.visuals.selection.stroke = Stroke::new(1., BLUE);
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1., BORDER);
-    style.visuals.widgets.inactive.weak_bg_fill = PANEL2;
-    style.visuals.widgets.inactive.bg_fill = PANEL2;
-    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1., BORDER);
+    style.visuals.selection.stroke = Stroke::new(1., blue());
+    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1., border());
+    style.visuals.widgets.inactive.weak_bg_fill = panel2();
+    style.visuals.widgets.inactive.bg_fill = panel2();
+    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1., border());
     style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(49, 57, 69);
     style.spacing.item_spacing = egui::vec2(6., 4.);
     style.spacing.button_padding = egui::vec2(10., 5.);
@@ -92,7 +92,7 @@ impl GritApp {
                     changes.len()
                 ))
                 .strong()
-                .color(if staged { GREEN } else { TEXT }),
+                .color(if staged { green() } else { text() }),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
@@ -157,7 +157,7 @@ impl GritApp {
                             "Working tree clean"
                         })
                         .small()
-                        .color(MUTED),
+                        .color(muted()),
                     );
                 }
                 if self.tree_mode {
@@ -192,9 +192,9 @@ impl GritApp {
                 for c in changes {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(c.status).monospace().color(if staged {
-                            GREEN
+                            green()
                         } else {
-                            BLUE
+                            blue()
                         }));
                         let width = (ui.available_width() - 42.).max(60.);
                         let response = ui.add_sized(
@@ -294,7 +294,7 @@ impl GritApp {
             ui.label(
                 RichText::new(format!("{staged} files staged"))
                     .small()
-                    .color(MUTED),
+                    .color(muted()),
             );
         });
         let can_commit = self.operation.is_none()
@@ -368,7 +368,7 @@ impl GritApp {
                     "Show whitespace to select individual lines. File staging remains available.",
                 )
                 .small()
-                .color(MUTED),
+                .color(muted()),
             );
         }
         let selectable = if interactive {
@@ -401,7 +401,7 @@ impl GritApp {
                 ui.label(
                     RichText::new(format!("{} selected", self.selected_diff_lines.len()))
                         .small()
-                        .color(MUTED),
+                        .color(muted()),
                 );
             });
             if !ui.ctx().wants_keyboard_input()
@@ -436,7 +436,7 @@ impl GritApp {
             .max_height((max_height - 60.).max(70.))
             .show(ui, |ui| {
                 if patch.is_empty() {
-                    ui.label(RichText::new("No text changes to display").color(MUTED));
+                    ui.label(RichText::new("No text changes to display").color(muted()));
                     return;
                 }
                 ui.spacing_mut().item_spacing.y = 0.;
@@ -464,16 +464,16 @@ impl GritApp {
                             .unwrap_or(0);
                     }
                     let (color, bg) = if line.starts_with('+') && !header {
-                        (GREEN, Color32::from_rgb(27, 48, 40))
+                        (green(), theme_color([27, 48, 40], [224, 244, 232]))
                     } else if line.starts_with('-') && !header {
                         (
-                            Color32::from_rgb(235, 139, 145),
-                            Color32::from_rgb(54, 34, 39),
+                            theme_color([235, 139, 145], [168, 35, 49]),
+                            theme_color([54, 34, 39], [253, 230, 233]),
                         )
                     } else if line.starts_with("@@") {
-                        (BLUE, Color32::from_rgb(31, 43, 59))
+                        (blue(), theme_color([31, 43, 59], [226, 236, 249]))
                     } else {
-                        (if header { MUTED } else { TEXT }, PANEL)
+                        (if header { muted() } else { text() }, panel())
                     };
                     let (old, new) = if header || line.starts_with('\\') {
                         (String::new(), String::new())
@@ -521,7 +521,7 @@ impl GritApp {
                         rect,
                         0.,
                         if selected {
-                            Color32::from_rgb(45, 68, 92)
+                            theme_color([45, 68, 92], [192, 215, 243])
                         } else {
                             bg
                         },
@@ -534,11 +534,11 @@ impl GritApp {
                         ui.painter().rect_stroke(
                             mark,
                             1.,
-                            Stroke::new(1., if selected { BLUE } else { MUTED }),
+                            Stroke::new(1., if selected { blue() } else { muted() }),
                             egui::StrokeKind::Inside,
                         );
                         if selected {
-                            ui.painter().rect_filled(mark.shrink(2.), 0., BLUE);
+                            ui.painter().rect_filled(mark.shrink(2.), 0., blue());
                         }
                         if response.clicked() && !self.selected_diff_lines.remove(&i) {
                             self.selected_diff_lines.insert(i);
@@ -550,7 +550,7 @@ impl GritApp {
                             egui::Align2::RIGHT_CENTER,
                             number,
                             FontId::monospace(11.),
-                            MUTED,
+                            muted(),
                         );
                     }
                     ui.painter().line_segment(
@@ -558,7 +558,7 @@ impl GritApp {
                             rect.left_top() + egui::vec2(100., 0.),
                             rect.left_bottom() + egui::vec2(100., 0.),
                         ],
-                        Stroke::new(1., BORDER),
+                        Stroke::new(1., border()),
                     );
                     ui.painter()
                         .galley(rect.min + egui::vec2(110., 2.), galley, color);
@@ -583,7 +583,7 @@ impl GritApp {
             };
             if let Some((name, command)) = operation {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new(format!("{name} in progress")).color(BLUE));
+                    ui.label(RichText::new(format!("{name} in progress")).color(blue()));
                     let conflicts = repo.index().is_ok_and(|i| i.has_conflicts());
                     if ui
                         .add_enabled(!conflicts, egui::Button::new(format!("Continue {name}")))
@@ -629,7 +629,7 @@ impl GritApp {
             }
             if !conflicts.is_empty() {
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(57, 40, 34))
+                    .fill(theme_color([57,40,34],[255,239,220]))
                     .stroke(Stroke::new(1., Color32::from_rgb(145, 94, 58)))
                     .corner_radius(8)
                     .inner_margin(8.)
@@ -641,14 +641,14 @@ impl GritApp {
                                 conflicts.len()
                             ))
                                 .strong()
-                                .color(Color32::from_rgb(255, 195, 128)),
+                                .color(theme_color([255,195,128],[138,74,10])),
                         );
                         for path in conflicts {
                             ui.horizontal(|ui| {
                                 if ui
                                     .selectable_label(
                                         self.selected_file.as_deref() == Some(&path),
-                                        RichText::new(&path).color(TEXT),
+                                        RichText::new(&path).color(text()),
                                     )
                                     .clicked()
                                 {
@@ -712,8 +712,8 @@ impl GritApp {
         let mut cancel_conflict_edit = false;
         if let Some((path, content)) = &mut self.conflict_draft {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1., BORDER))
+                .fill(panel())
+                .stroke(Stroke::new(1., border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {
@@ -721,7 +721,7 @@ impl GritApp {
                         ui.label(
                             RichText::new(format!("Resolve · {path}"))
                                 .strong()
-                                .color(TEXT),
+                                .color(text()),
                         );
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
@@ -766,8 +766,8 @@ impl GritApp {
         let mut cancel_patch = false;
         if let Some((path, patch)) = &mut self.patch_draft {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1., BORDER))
+                .fill(panel())
+                .stroke(Stroke::new(1., border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {
@@ -775,7 +775,7 @@ impl GritApp {
                         ui.label(
                             RichText::new(format!("Partial staging · {path}"))
                                 .strong()
-                                .color(TEXT),
+                                .color(text()),
                         );
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
@@ -795,7 +795,7 @@ impl GritApp {
                     ui.label(
                         RichText::new("Keep + or − lines you want staged. Remove unwanted + lines. To leave a − line unstaged, change its prefix to a space so it remains as context.")
                             .small()
-                            .color(MUTED),
+                            .color(muted()),
                     );
                     ui.add(
                         egui::TextEdit::multiline(patch)

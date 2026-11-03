@@ -10,14 +10,39 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-const BG: Color32 = Color32::from_rgb(25, 28, 34);
-const PANEL: Color32 = Color32::from_rgb(29, 33, 40);
-const PANEL2: Color32 = Color32::from_rgb(35, 39, 47);
-const BORDER: Color32 = Color32::from_rgb(48, 55, 67);
-const TEXT: Color32 = Color32::from_rgb(226, 231, 239);
-const MUTED: Color32 = Color32::from_rgb(146, 156, 172);
-const BLUE: Color32 = Color32::from_rgb(98, 164, 255);
-const GREEN: Color32 = Color32::from_rgb(107, 202, 157);
+static LIGHT_THEME: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn theme_color(dark: [u8; 3], light: [u8; 3]) -> Color32 {
+    let c = if LIGHT_THEME.load(std::sync::atomic::Ordering::Relaxed) {
+        light
+    } else {
+        dark
+    };
+    Color32::from_rgb(c[0], c[1], c[2])
+}
+fn bg() -> Color32 {
+    theme_color([25, 28, 34], [245, 247, 250])
+}
+fn panel() -> Color32 {
+    theme_color([29, 33, 40], [255, 255, 255])
+}
+fn panel2() -> Color32 {
+    theme_color([35, 39, 47], [232, 237, 244])
+}
+fn border() -> Color32 {
+    theme_color([48, 55, 67], [186, 196, 211])
+}
+fn text() -> Color32 {
+    theme_color([226, 231, 239], [27, 35, 48])
+}
+fn muted() -> Color32 {
+    theme_color([146, 156, 172], [83, 96, 114])
+}
+fn blue() -> Color32 {
+    theme_color([98, 164, 255], [28, 93, 182])
+}
+fn green() -> Color32 {
+    theme_color([107, 202, 157], [20, 115, 68])
+}
 
 #[derive(Clone)]
 struct Change {
@@ -48,6 +73,9 @@ struct CommitFile {
 #[derive(Default)]
 struct GritApp {
     file_actions: file_action_features::FileActions,
+    settings: settings_features::AppSettings,
+    show_settings: bool,
+    settings_last_theme: Option<egui::Theme>,
     worktree_tools: worktree_features::WorktreeTools,
     code_search: code_search_features::CodeSearchTools,
     preview_tools: preview_features::PreviewTools,
@@ -957,7 +985,7 @@ impl GritApp {
     }
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("grit").size(22.).strong().color(TEXT));
+            ui.label(RichText::new("grit").size(22.).strong().color(text()));
             ui.add_space(18.);
             ui.menu_button("Repository", |ui| {
                 if ui.button("Open…                 Ctrl+O").clicked() {
@@ -1042,7 +1070,7 @@ impl GritApp {
                 self.refresh();
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new(&self.branch).color(GREEN).monospace());
+                ui.label(RichText::new(&self.branch).color(green()).monospace());
                 if self.operation.is_some() {
                     ui.spinner();
                 }
@@ -1086,7 +1114,7 @@ impl GritApp {
                         for path in &self.open_repos {
                             let active = self.path.as_ref() == Some(path);
                             egui::Frame::new()
-                                .fill(if active { PANEL2 } else { PANEL })
+                                .fill(if active { panel2() } else { panel() })
                                 .inner_margin(6.)
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
@@ -1135,13 +1163,17 @@ impl GritApp {
         });
     }
     fn sidebar(&mut self, ui: &mut egui::Ui) {
+        let tr = |key| settings_features::translate(self.settings.language, key);
+        if ui.button(tr("settings")).clicked() {
+            self.show_settings = true;
+        }
         ui.add_space(8.);
-        ui.label(RichText::new("REPOSITORY").small().strong().color(MUTED));
+        ui.label(RichText::new("REPOSITORY").small().strong().color(muted()));
         ui.add_space(6.);
         for (label, tab, count) in [
-            ("History", 1, self.commits.len()),
-            ("Uncommitted changes", 0, self.changes.len()),
-            ("Files", 5, self.tracked_files.len()),
+            (tr("history"), 1, self.commits.len()),
+            (tr("changes"), 0, self.changes.len()),
+            (tr("files"), 5, self.tracked_files.len()),
         ] {
             if ui
                 .add_sized(
@@ -1209,7 +1241,7 @@ impl GritApp {
         {
             self.tab = 9;
         }
-        egui::CollapsingHeader::new(RichText::new("LOCAL BRANCHES").small().color(MUTED))
+        egui::CollapsingHeader::new(RichText::new("LOCAL BRANCHES").small().color(muted()))
             .default_open(true)
             .show(ui, |ui| {
                 for branch in self.branches.clone() {
@@ -1218,7 +1250,7 @@ impl GritApp {
                         [ui.available_width(), 25.],
                         egui::Button::new(
                             RichText::new(format!("{}  {branch}", if current { "•" } else { " " }))
-                                .color(if current { GREEN } else { TEXT }),
+                                .color(if current { green() } else { text() }),
                         )
                         .frame(false),
                     );
@@ -1253,11 +1285,11 @@ impl GritApp {
                 }
             });
         ui.add_space(10.);
-        egui::CollapsingHeader::new(RichText::new("REMOTES").small().color(MUTED))
+        egui::CollapsingHeader::new(RichText::new("REMOTES").small().color(muted()))
             .default_open(true)
             .show(ui, |ui| {
                 for branch in &self.remote_branches {
-                    ui.label(RichText::new(branch).color(MUTED));
+                    ui.label(RichText::new(branch).color(muted()));
                 }
                 if ui.small_button("Manage remotes…").clicked() {
                     self.tab = 3;
@@ -1267,22 +1299,22 @@ impl GritApp {
         egui::CollapsingHeader::new(
             RichText::new(format!("TAGS   {}", self.tags.len()))
                 .small()
-                .color(MUTED),
+                .color(muted()),
         )
         .default_open(false)
         .show(ui, |ui| {
             for tag in &self.tags {
-                ui.label(RichText::new(tag).color(BLUE));
+                ui.label(RichText::new(tag).color(blue()));
             }
             if self.tags.is_empty() {
-                ui.label(RichText::new("No tags").small().color(MUTED));
+                ui.label(RichText::new("No tags").small().color(muted()));
             }
         });
         ui.add_space(10.);
         egui::CollapsingHeader::new(
             RichText::new(format!("STASHES   {}", self.stashes.len()))
                 .small()
-                .color(MUTED),
+                .color(muted()),
         )
         .default_open(false)
         .show(ui, |ui| {
@@ -1311,7 +1343,7 @@ impl GritApp {
                 })
                 .size(15.)
                 .strong()
-                .color(TEXT),
+                .color(text()),
             );
             if matches!(self.tab, 0 | 5) {
                 ui.selectable_value(&mut self.tree_mode, false, "List");
@@ -1396,7 +1428,7 @@ impl GritApp {
                         RichText::new(format!(
                             "Discard uncommitted changes to {path}? This cannot be undone."
                         ))
-                        .color(TEXT),
+                        .color(text()),
                     );
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
@@ -1428,7 +1460,7 @@ impl GritApp {
                             "No Git repository was found in {}. Initialize one there? Existing files will stay in place.",
                             path.display()
                         ))
-                        .color(TEXT),
+                        .color(text()),
                     );
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
@@ -1455,7 +1487,7 @@ impl GritApp {
                         RichText::new(
                             "Reorder lines or change pick to edit, squash, fixup, or drop. Keep a pick/edit commit before squash or fixup.",
                         )
-                        .color(MUTED),
+                        .color(muted()),
                     );
                     ui.add_space(8.);
                     let _ = rebase_features::rebase_plan_ui(ui, &mut plan);
@@ -1515,7 +1547,7 @@ impl GritApp {
                 });
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().inner_margin(8.).fill(PANEL))
+            .frame(egui::Frame::new().inner_margin(8.).fill(panel()))
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
@@ -1530,7 +1562,7 @@ impl GritApp {
                                 "Unstaged"
                             })
                             .small()
-                            .color(MUTED),
+                            .color(muted()),
                         );
                     });
                 });
@@ -1557,7 +1589,7 @@ impl GritApp {
         let matching = match self.history_matches() {
             Ok(ids) => ids,
             Err(error) => {
-                ui.colored_label(Color32::from_rgb(235, 139, 145), error);
+                ui.colored_label(theme_color([235, 139, 145], [168, 35, 49]), error);
                 return;
             }
         };
@@ -1772,7 +1804,7 @@ impl GritApp {
                     egui::Align2::LEFT_CENTER,
                     label,
                     FontId::proportional(11.),
-                    MUTED,
+                    muted(),
                 );
             }
             ui.separator();
@@ -1796,13 +1828,13 @@ impl GritApp {
                         rect,
                         0.,
                         if selected {
-                            Color32::from_rgb(41, 65, 91)
+                            theme_color([41, 65, 91], [198, 219, 244])
                         } else if response.hovered() {
-                            PANEL2
+                            panel2()
                         } else if i % 2 == 0 {
-                            PANEL
+                            panel()
                         } else {
-                            BG
+                            bg()
                         },
                     );
                     let graph_rect = egui::Rect::from_min_size(
@@ -1821,7 +1853,7 @@ impl GritApp {
                             egui::Align2::LEFT_CENTER,
                             "★",
                             FontId::proportional(13.),
-                            Color32::from_rgb(235, 190, 90),
+                            theme_color([235, 190, 90], [140, 96, 8]),
                         );
                         x += 18.;
                     }
@@ -1834,14 +1866,14 @@ impl GritApp {
                         let galley = painter.layout_no_wrap(
                             reference.clone(),
                             FontId::proportional(11.),
-                            GREEN,
+                            green(),
                         );
                         let badge = egui::Rect::from_min_size(
                             egui::pos2(x, rect.top() + 5.),
                             galley.size() + egui::vec2(10., 4.),
                         );
-                        painter.rect_filled(badge, 3., Color32::from_rgb(37, 65, 56));
-                        painter.galley(badge.min + egui::vec2(5., 2.), galley, GREEN);
+                        painter.rect_filled(badge, 3., theme_color([37, 65, 56], [206, 236, 220]));
+                        painter.galley(badge.min + egui::vec2(5., 2.), galley, green());
                         x = badge.right() + 6.;
                     }
                     painter.text(
@@ -1849,7 +1881,7 @@ impl GritApp {
                         egui::Align2::LEFT_CENTER,
                         &commit.message,
                         FontId::proportional(13.),
-                        TEXT,
+                        text(),
                     );
                     for (left, right, value, mono) in [
                         (author_x, date_x - 8., commit.author.as_str(), false),
@@ -1872,7 +1904,7 @@ impl GritApp {
                             } else {
                                 FontId::proportional(12.)
                             },
-                            MUTED,
+                            muted(),
                         );
                     }
                     if response.clicked() {
@@ -1908,7 +1940,7 @@ impl GritApp {
         });
         if !self.focus_mode {
             egui::CentralPanel::default()
-                .frame(egui::Frame::new().fill(PANEL).inner_margin(8.))
+                .frame(egui::Frame::new().fill(panel()).inner_margin(8.))
                 .show_inside(ui, |ui| self.commit_detail_view(ui));
         }
     }
@@ -1935,21 +1967,21 @@ impl GritApp {
                 if ui.small_button("Copy SHA").clicked() {
                     ui.ctx().copy_text(commit.id.clone());
                 }
-                ui.label(RichText::new(&commit.short).monospace().color(BLUE));
+                ui.label(RichText::new(&commit.short).monospace().color(blue()));
             });
         });
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new(format!("{}  ·  {}", commit.author, commit.date))
                     .small()
-                    .color(MUTED),
+                    .color(muted()),
             );
             ui.menu_button("Commit actions", |ui| {
                 ui.label(
                     RichText::new(format!("Commit {}", &id[..7.min(id.len())]))
                         .small()
                         .monospace()
-                        .color(MUTED),
+                        .color(muted()),
                 );
                 if ui
                     .add_enabled(self.operation.is_none(), egui::Button::new("Cherry-pick"))
@@ -2026,7 +2058,7 @@ impl GritApp {
                         RichText::new(format!("Files   {}", self.commit_files.len()))
                             .small()
                             .strong()
-                            .color(MUTED),
+                            .color(muted()),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
@@ -2093,9 +2125,9 @@ impl GritApp {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(file.status).monospace().color(
                                     match file.status {
-                                        "A" => GREEN,
-                                        "D" => Color32::from_rgb(235, 139, 145),
-                                        _ => BLUE,
+                                        "A" => green(),
+                                        "D" => theme_color([235, 139, 145], [168, 35, 49]),
+                                        _ => blue(),
                                     },
                                 ));
                                 if ui
@@ -2132,7 +2164,7 @@ impl GritApp {
                 .unwrap_or_default();
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(8.))
+            .frame(egui::Frame::new().fill(panel()).inner_margin(8.))
             .show_inside(ui, |ui| {
                 ui.label(
                     RichText::new(
@@ -2141,7 +2173,7 @@ impl GritApp {
                             .unwrap_or("All changes"),
                     )
                     .small()
-                    .color(MUTED),
+                    .color(muted()),
                 );
                 ui.separator();
                 self.diff_panel(ui, ui.available_height());
@@ -2157,7 +2189,7 @@ impl GritApp {
             return;
         }
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Local branches").color(MUTED));
+            ui.label(RichText::new("Local branches").color(muted()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui.button("Create branch").clicked() {
                     let name = self.new_branch.trim().to_owned();
@@ -2176,16 +2208,16 @@ impl GritApp {
         ui.add_space(8.);
         for b in self.branches.clone() {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1., BORDER))
+                .fill(panel())
+                .stroke(Stroke::new(1., border()))
                 .corner_radius(8)
                 .inner_margin(10.)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("⑂").color(BLUE));
-                        ui.label(RichText::new(&b).strong().color(TEXT));
+                        ui.label(RichText::new("⑂").color(blue()));
+                        ui.label(RichText::new(&b).strong().color(text()));
                         if b == self.branch {
-                            ui.label(RichText::new("CURRENT").small().color(GREEN));
+                            ui.label(RichText::new("CURRENT").small().color(green()));
                         } else {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if ui.small_button("Delete").clicked() {
@@ -2229,25 +2261,25 @@ impl GritApp {
             RichText::new("REMOTE BRANCHES")
                 .small()
                 .strong()
-                .color(MUTED),
+                .color(muted()),
         );
         if self.remote_branches.is_empty() {
             ui.label(
                 RichText::new("Fetch a remote to list its branches.")
                     .small()
-                    .color(MUTED),
+                    .color(muted()),
             );
         }
         for branch in self.remote_branches.clone() {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1., BORDER))
+                .fill(panel())
+                .stroke(Stroke::new(1., border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("⇄").color(BLUE));
-                        ui.label(RichText::new(&branch).color(TEXT).monospace());
+                        ui.label(RichText::new("⇄").color(blue()));
+                        ui.label(RichText::new(&branch).color(text()).monospace());
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if ui
                                 .add_enabled(
@@ -2267,7 +2299,7 @@ impl GritApp {
         }
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Create tag at HEAD").color(MUTED));
+            ui.label(RichText::new("Create tag at HEAD").color(muted()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui.button("Create tag").clicked() {
                     let name = self.new_tag.trim().to_owned();
@@ -2283,10 +2315,10 @@ impl GritApp {
             });
         });
         ui.add_space(8.);
-        ui.label(RichText::new("Tags").color(MUTED));
+        ui.label(RichText::new("Tags").color(muted()));
         for tag in self.tags.clone() {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("◆  {tag}")).color(GREEN));
+                ui.label(RichText::new(format!("◆  {tag}")).color(green()));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.small_button("Manage tags…").clicked() {
                         self.tab = 6;
@@ -2305,7 +2337,7 @@ impl GritApp {
             return;
         }
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Repository remotes").color(MUTED));
+            ui.label(RichText::new("Repository remotes").color(muted()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add_enabled(self.operation.is_none(), egui::Button::new("Add remote"))
@@ -2351,16 +2383,16 @@ impl GritApp {
                     .and_then(|r| r.url().map(str::to_owned))
                     .unwrap_or_default();
                 egui::Frame::new()
-                    .fill(PANEL)
-                    .stroke(Stroke::new(1., BORDER))
+                    .fill(panel())
+                    .stroke(Stroke::new(1., border()))
                     .corner_radius(8)
                     .inner_margin(10.)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("⇄").color(BLUE));
+                            ui.label(RichText::new("⇄").color(blue()));
                             ui.vertical(|ui| {
-                                ui.label(RichText::new(name).strong().color(TEXT));
-                                ui.label(RichText::new(&url).small().color(MUTED));
+                                ui.label(RichText::new(name).strong().color(text()));
+                                ui.label(RichText::new(&url).small().color(muted()));
                             });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if ui.small_button("Remove").clicked() {
@@ -2409,7 +2441,7 @@ impl GritApp {
                 ui.label(
                     RichText::new(format!("Tracked files   {}", files.len()))
                         .small()
-                        .color(MUTED),
+                        .color(muted()),
                 );
                 ui.separator();
                 egui::ScrollArea::vertical()
@@ -2463,7 +2495,7 @@ impl GritApp {
                     });
             });
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(8.))
+            .frame(egui::Frame::new().fill(panel()).inner_margin(8.))
             .show_inside(ui, |ui| {
                 ui.label(
                     RichText::new(self.selected_file.as_deref().unwrap_or("Select a file"))
@@ -2528,9 +2560,9 @@ impl GritApp {
     fn empty(&self, ui: &mut egui::Ui, title: &str, sub: &str) {
         ui.add_space(60.);
         ui.vertical_centered(|ui| {
-            ui.label(RichText::new("◈").size(32.).color(BLUE));
-            ui.label(RichText::new(title).size(18.).strong().color(TEXT));
-            ui.label(RichText::new(sub).color(MUTED));
+            ui.label(RichText::new("◈").size(32.).color(blue()));
+            ui.label(RichText::new(title).size(18.).strong().color(text()));
+            ui.label(RichText::new(sub).color(muted()));
         });
     }
 }
@@ -2728,9 +2760,9 @@ fn graph_layout(commits: &[Commit]) -> Vec<GraphRow> {
     rows
 }
 fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
-    const COLORS: [Color32; 6] = [
-        BLUE,
-        GREEN,
+    let colors: [Color32; 6] = [
+        blue(),
+        green(),
         Color32::from_rgb(229, 158, 91),
         Color32::from_rgb(196, 132, 230),
         Color32::from_rgb(92, 197, 205),
@@ -2741,7 +2773,7 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
     let width = row.before.len().max(row.after.len());
     for lane in 0..width {
         let x = x_for(lane);
-        let color = COLORS[lane % COLORS.len()];
+        let color = colors[lane % colors.len()];
         if lane == row.lane {
             painter.line_segment(
                 [egui::pos2(x, rect.top()), egui::pos2(x, center_y)],
@@ -2777,7 +2809,7 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
     painter.circle_filled(
         egui::pos2(x_for(row.lane), center_y),
         5.,
-        COLORS[row.lane % COLORS.len()],
+        colors[row.lane % colors.len()],
     );
 }
 fn diff_file_side(r: &Repository, path: &str, staged: bool) -> String {
@@ -2920,6 +2952,10 @@ fn diff_commit_path(r: &Repository, id: &str, path: Option<&str>) -> String {
 }
 impl eframe::App for GritApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string(
+            "app_settings",
+            history_features::encode_records(&self.settings.encode_records()),
+        );
         let paths = self
             .recent_repos
             .iter()
@@ -3008,6 +3044,15 @@ impl eframe::App for GritApp {
         );
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        let theme = ctx.theme();
+        if self.settings_last_theme != Some(theme) {
+            self.settings.font_error = self.settings.apply_settings(ctx).err();
+            self.settings_last_theme = Some(ctx.theme());
+        }
+        LIGHT_THEME.store(
+            !ctx.style().visuals.dark_mode,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let finished = self
             .operation
             .as_ref()
@@ -3084,7 +3129,13 @@ impl eframe::App for GritApp {
         self.poll_repository_watcher(ctx);
         self.poll_auto_fetch(ctx);
         if self.operation.is_none()
-            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Q))
+            && ctx.input_mut(|i| {
+                i.consume_shortcut(
+                    &self
+                        .settings
+                        .shortcut(settings_features::ShortcutAction::Quit),
+                )
+            })
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -3100,18 +3151,49 @@ impl eframe::App for GritApp {
         {
             self.open(path);
         }
-        if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::O))
-            && let Some(path) = rfd::FileDialog::new().pick_folder()
+        if ctx.input_mut(|input| {
+            input.consume_shortcut(
+                &self
+                    .settings
+                    .shortcut(settings_features::ShortcutAction::OpenRepository),
+            )
+        }) && let Some(path) = rfd::FileDialog::new().pick_folder()
         {
             self.open(path);
         }
-        if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::R))
-            && self.operation.is_none()
+        if ctx.input_mut(|input| {
+            input.consume_shortcut(
+                &self
+                    .settings
+                    .shortcut(settings_features::ShortcutAction::Refresh),
+            )
+        }) && self.operation.is_none()
         {
             self.refresh();
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::M)) {
+        if ctx.input_mut(|i| {
+            i.consume_shortcut(
+                &self
+                    .settings
+                    .shortcut(settings_features::ShortcutAction::ToggleFocus),
+            )
+        }) {
             self.focus_mode = !self.focus_mode;
+        }
+        if self.show_settings {
+            let mut open = true;
+            egui::Window::new(settings_features::translate(
+                self.settings.language,
+                "settings",
+            ))
+            .open(&mut open)
+            .default_width(530.)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(550.)
+                    .show(ui, |ui| self.settings.settings_ui(ui, ctx));
+            });
+            self.show_settings = open;
         }
         if self.show_commit_options {
             let mut open = true;
@@ -3145,7 +3227,7 @@ impl eframe::App for GritApp {
         egui::TopBottomPanel::top("toolbar")
             .frame(
                 egui::Frame::new()
-                    .fill(PANEL)
+                    .fill(panel())
                     .inner_margin(egui::Margin::symmetric(12, 8)),
             )
             .show(ctx, |ui| {
@@ -3154,20 +3236,20 @@ impl eframe::App for GritApp {
         egui::TopBottomPanel::top("repositories")
             .frame(
                 egui::Frame::new()
-                    .fill(BG)
+                    .fill(bg())
                     .inner_margin(egui::Margin::symmetric(8, 0)),
             )
             .show(ctx, |ui| self.repository_tabs(ui));
         egui::TopBottomPanel::bottom("status")
             .frame(
                 egui::Frame::new()
-                    .fill(PANEL)
+                    .fill(panel())
                     .inner_margin(egui::Margin::symmetric(10, 5)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::Label::new(RichText::new(&self.notice).small().color(MUTED))
+                        egui::Label::new(RichText::new(&self.notice).small().color(muted()))
                             .truncate(),
                     )
                     .on_hover_text(&self.notice);
@@ -3177,7 +3259,7 @@ impl eframe::App for GritApp {
                                 egui::Label::new(
                                     RichText::new(path.display().to_string())
                                         .small()
-                                        .color(MUTED),
+                                        .color(muted()),
                                 )
                                 .truncate(),
                             );
@@ -3190,13 +3272,13 @@ impl eframe::App for GritApp {
                 .resizable(true)
                 .default_width(220.)
                 .width_range(180. ..=340.)
-                .frame(egui::Frame::new().fill(PANEL).inner_margin(10.))
+                .frame(egui::Frame::new().fill(panel()).inner_margin(10.))
                 .show(ctx, |ui| {
                     egui::ScrollArea::vertical().show(ui, |ui| self.sidebar(ui));
                 });
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(BG).inner_margin(8.))
+            .frame(egui::Frame::new().fill(bg()).inner_margin(8.))
             .show(ctx, |ui| {
                 ui.add_enabled_ui(self.operation.is_none(), |ui| self.content(ui));
             });
@@ -3218,6 +3300,7 @@ mod rebase_features;
 mod remote_features;
 mod repository_features;
 mod reset_features;
+mod settings_features;
 mod stash_features;
 #[cfg(test)]
 mod tests;
@@ -3261,6 +3344,12 @@ fn main() -> eframe::Result<()> {
             };
             let mut active_path = None;
             if let Some(storage) = context.storage {
+                if let Some(saved) = storage.get_string("app_settings")
+                    && let Ok(records) = history_features::decode_records(&saved)
+                    && let Ok(settings) = settings_features::AppSettings::decode_records(&records)
+                {
+                    app.settings = settings;
+                }
                 if let Some(recent) = storage.get_string("recent_repositories") {
                     app.recent_repos = recent
                         .lines()

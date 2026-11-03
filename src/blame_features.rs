@@ -247,7 +247,7 @@ impl GritApp {
         ui.heading(format!("Blame · {}", self.blame_state.path));
         let mut refresh = false;
         ui.horizontal(|ui| {
-            ui.label(RichText::new(&self.blame_state.version).color(MUTED));
+            ui.label(RichText::new(&self.blame_state.version).color(muted()));
             if ui.button("Refresh").clicked() && !self.blame_state.loading {
                 refresh = true;
             }

@@ -40,7 +40,7 @@ Abgleich mit dem vorhandenen grit-Code: `src/main.rs`, `src/ui.rs`, `src/tests.r
 | Log mit Operationen und Fehlern | Nur aktuelle Statusmeldung | Begrenzte Sitzungshistorie mit vollständiger Ausgabe ergänzen |
 | Dateisystemänderungen automatisch erkennen | Fehlt | Runde 3: Hintergrund-Polling alle 2 s für Arbeitsbaum/Index/Referenzen; pausierbar |
 | Terminal und Dateimanager öffnen | Fehlt | Plattformabhängige explizite Benutzeraktionen; keine Shell-Interpolation |
-| Sprache, Fonts, Theme, Hotkeys konfigurierbar | Dunkles Theme, wenige Shortcuts | Umfangreiche Einstellungsoberfläche offen |
+| Sprache, Fonts, Theme, Hotkeys konfigurierbar | Dunkles Theme, wenige Shortcuts | Runde 3: System/Dark/Light, Textgröße, Fonts, eigene Datei und vier konfigurierbare globale Shortcuts; Übersetzung teilweise |
 | Single-instance, Auto-Update, Plugins | Fehlt | Eigene Infrastruktur, nach Kernparität |
 
 ### Verlauf, Referenzen und Suche
@@ -187,7 +187,7 @@ Die datumsbasierten Suchgrenzen sind inklusiv und berücksichtigen den Commit-Ze
 
 ### Explizite Grenzen
 
-Textzeilen-Staging unterstützt keine Binär-, Rename/Copy- oder reinen Mode-Patches; hierfür bleibt das Staging der gesamten Datei. Leere Dateien haben keine Textzeilen zum Selektieren. Nicht darstellbare partielle EOF-Patches werden von Git mit sichtbarer Fehlermeldung abgelehnt. Es gibt noch keinen lexikalischen Suchindex, keine Hosting-Konten-/PR-Verwaltung, keinen interaktiven Blame-Heatmap-Renderer, keine eingebettete Bildvorschau, keine vollständige externe Diff/Merge-Tool-Konfiguration und keine umfassenden Reset-/Force-Push-Dialoge. Diese Punkte bleiben Arbeitsvorrat aus der Matrix und werden nicht als erledigt ausgegeben.
+Textzeilen-Staging unterstützt keine Binär-, Rename/Copy- oder reinen Mode-Patches; hierfür bleibt das Staging der gesamten Datei. Leere Dateien haben keine Textzeilen zum Selektieren. Nicht darstellbare partielle EOF-Patches werden von Git mit sichtbarer Fehlermeldung abgelehnt. In Runde 3 wurden begrenzter lexikalischer Suchindex, Bildvorschau, externe Diff-/Merge-Werkzeuge und bestätigte Reset-/Force-with-lease-Dialoge ergänzt. Weiter offen bleiben insbesondere Hosting-Konten/API-PR-Verwaltung, vollständiger Blame-Heatmap-/Copy-Move-Ausbau, vollständige Übersetzung, native SHA-256-Unterstützung und Updater-/Plugin-Infrastruktur. Browser-Hostingworkflows werden getrennt von Konten-/API-Funktionen bewertet.
 
 ### Commit-Regel
 
@@ -295,3 +295,15 @@ Luna-Paket `file_action_features`: Markierte ungestagte UTF-8-Diffzeilen können
 Files → Executable bit bietet einen expliziten Schalter für den Indexmodus regulärer getrackter Dateien. Symlinks, Submodule und Konfliktstufen sind ausgeschlossen. Arbeitsdatei und Betriebssystemrechte werden nicht verändert.
 
 Abnahme: Vier echte Git-Tests prüfen context 0/3, mehrere Hunks, gemischte Ergänzungen/Löschungen, CRLF, neue/gelöschte Dateien, unveränderten Index und erhaltene übrige Änderungen, stale Review sowie literal Dateipfade beim Moduswechsel.
+
+### Darstellung, Schrift und Tastenkürzel
+
+Luna-Paket `settings_features` mit Palette-Integration durch den Hauptagenten: Settings speichert System/Dark/Light, Textgröße, proportionale/Monospace-Schrift sowie eine eigene TTF-/OTF-Datei. Die zentrale UI-Palette passt Panels, Text, Auswahl und Diffhintergründe an Light/Dark an. Eigene Fonts sind auf 8 MiB begrenzt und werden vor Übergabe an egui durch `ttf-parser` geprüft. Fehler sind sichtbar; Rückkehr zu eingebauten Fonts setzt die Fontdefinitionen zurück.
+
+Open/Refresh/Focus/Quit sind konfigurierbar; doppelte, unmodifizierte Buchstaben- und reservierte Bearbeitungs-/Systemkürzel sind gesperrt. Während ungültiger Eingaben gelten weiterhin die Defaults. Ctrl bezeichnet auf macOS die Command-Taste. Settings und Kernnavigation sind teilweise Deutsch/Englisch übersetzt; vollständige Übersetzung sämtlicher Fachdialoge bleibt ausdrücklich offen.
+
+Abnahme: Drei Tests prüfen Persistenz und fehlerhafte Präferenzen, Shortcutkonflikte und beschädigte Fontdaten. Gesamtstand: 97 Tests grün, Clippy mit Warnungen als Fehler erfolgreich. Native Sichtprüfung prüfte History, alte/neue Bildvorschau, Suche, Settings und Light/Dark; Kontrastfehler dunkler Auswahl-/Diffhintergründe im hellen Theme wurden korrigiert.
+
+### AppImage-Regel
+
+Seit der Benutzeranweisung vom 3. November wird nach jeweils vier weiteren Commits ein neues, nach Commit benanntes AppImage gebaut. Prüfung: frisches AppDir, Vergleich der extrahierten ELF-Build-ID mit dem Releasebinary und direkter Start des tatsächlichen AppImages. Nach der Paketprüfung geht die Featurearbeit weiter. Die Regel ist keine Erledigt-Markierung für noch offene Features.

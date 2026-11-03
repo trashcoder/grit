@@ -1477,6 +1477,7 @@ dependencies = [
  "git2",
  "image",
  "rfd",
+ "ttf-parser",
 ]
 
 [[package]]
