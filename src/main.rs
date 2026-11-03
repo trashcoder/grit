@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    watcher: watcher_features::RepositoryWatcher,
     metadata_tools: metadata_features::MetadataTools,
     reset_tools: reset_features::ResetTools,
     tree_mode: bool,
@@ -190,6 +191,7 @@ impl GritApp {
         self.blame_state = Default::default();
         self.reset_tools = Default::default();
         self.metadata_tools = Default::default();
+        self.watcher = Default::default();
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -3051,6 +3053,7 @@ impl eframe::App for GritApp {
             self.refresh();
         }
         self.was_focused = focused;
+        self.poll_repository_watcher(ctx);
         if self.operation.is_none()
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Q))
         {
@@ -3170,6 +3173,7 @@ impl eframe::App for GritApp {
             });
     }
 }
+mod watcher_features;
 mod metadata_features;
 mod reset_features;
 mod blame_features;

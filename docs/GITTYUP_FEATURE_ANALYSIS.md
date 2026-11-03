@@ -38,7 +38,7 @@ Abgleich mit dem vorhandenen grit-Code: `src/main.rs`, `src/ui.rs`, `src/tests.r
 | Diff- und History-Bereich maximieren | Fehlt | `Ctrl/Cmd+M`, temporärer Fokusmodus |
 | Baum-/Listen-/Doppelbaum-Dateiansicht | Staging-Doppelliste vorhanden | Echte Verzeichnisbäume für Files, Commit und Changes in Runde 2 integriert |
 | Log mit Operationen und Fehlern | Nur aktuelle Statusmeldung | Begrenzte Sitzungshistorie mit vollständiger Ausgabe ergänzen |
-| Dateisystemänderungen automatisch erkennen | Fehlt | Gedrosseltes Refresh bei Fokuswechsel; voller Watcher offen |
+| Dateisystemänderungen automatisch erkennen | Fehlt | Runde 3: Hintergrund-Polling alle 2 s für Arbeitsbaum/Index/Referenzen; pausierbar |
 | Terminal und Dateimanager öffnen | Fehlt | Plattformabhängige explizite Benutzeraktionen; keine Shell-Interpolation |
 | Sprache, Fonts, Theme, Hotkeys konfigurierbar | Dunkles Theme, wenige Shortcuts | Umfangreiche Einstellungsoberfläche offen |
 | Single-instance, Auto-Update, Plugins | Fehlt | Eigene Infrastruktur, nach Kernparität |
@@ -235,3 +235,9 @@ Abnahme: vier Tests gegen echte temporäre Repositories prüfen Soft mit veränd
 Luna-Paket `commit_metadata`: Im Commit-Optionsfenster öffnet „Edit HEAD metadata“ den vollständigen Committext und getrennte Autor-/Committer-Felder einschließlich RFC3339-Zeit mit Zeitzonenoffset. Review zeigt Alt/Neu. Der Worker prüft HEAD-OID, symbolische Referenz und inaktiven Operationszustand erneut. `commit --amend --only --no-edit --reset-author` übernimmt explizite Identitäten/Datumswerte und lässt vorhandene Indexänderungen aus dem Commit heraus. Der gemeinsame Operationsworker sperrt parallele Git-Aktionen.
 
 Abnahme: Echter Git-Test über die Produktionsfunktion prüft beide Identitäten, Zeitstempel und Offsets sowie unveränderte Nachricht, Commit-Tree und vorgemerkten Index-Tree. Der Test fand und korrigierte die fehlende `--reset-author`-Option.
+
+### Automatische lokale Änderungserkennung
+
+Der Repository-Watcher berechnet alle zwei Sekunden im Hintergrund einen Fingerabdruck aus Referenzen, Indexeinträgen, Status und Dateimetadaten. Er erkennt auch erneute Bearbeitung bereits veränderter Dateien, neue ungetrackte Dateien sowie Branch-/Stash-/Indexänderungen. Änderungen aktualisieren die Ansichten auch ohne Fokuswechsel. Eine laufende Git-Aktion verzögert Refresh, Repositorywechsel verwerfen fremde Ergebnisse; Repository Tools bietet Pause und sichtbare Fehler. Kein Netzwerkzugriff.
+
+Abnahme: Ein echter Repositorytest prüft stabile Fingerabdrücke sowie Worktree-Bearbeitung, erneute Bearbeitung, Index, Branch, verschachtelte untracked Datei und Löschung. Es handelt sich um portables Polling, keinen Betriebssystem-Eventwatcher. Große Repositories werden im Hintergrund gescannt; der aktuelle Refresh-Pfad wird anschließend im UI-Thread ausgeführt.
