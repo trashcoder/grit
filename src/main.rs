@@ -47,12 +47,13 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    preview_tools: preview_features::PreviewTools,
     external_diff: external_diff_features::ExternalDiffTools,
     stash_tools: stash_features::StashTools,
-    remote_tools: remote_features::RemoteTools,
     watcher: watcher_features::RepositoryWatcher,
-    metadata_tools: metadata_features::MetadataTools,
     reset_tools: reset_features::ResetTools,
+    remote_tools: remote_features::RemoteTools,
+    metadata_tools: metadata_features::MetadataTools,
     tree_mode: bool,
     blame_state: blame_features::BlameState,
     diff_preferences: diff_preferences::DiffPreferences,
@@ -93,6 +94,7 @@ struct GritApp {
     commit_files: Vec<CommitFile>,
     selected_file: Option<String>,
     selected_staged: bool,
+    file_preview_bytes: Option<Vec<u8>>,
     file_content: String,
     diff: String,
     message: String,
@@ -191,10 +193,10 @@ impl GritApp {
         self.selected_commit = None;
         self.display_diff_key = None;
         self.blame_state = Default::default();
-        self.reset_tools = Default::default();
-        self.stash_tools = Default::default();
-        self.metadata_tools = Default::default();
         self.watcher = Default::default();
+        self.reset_tools = Default::default();
+        self.metadata_tools = Default::default();
+        self.stash_tools = Default::default();
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -206,6 +208,7 @@ impl GritApp {
         self.commit_files.clear();
         self.selected_file = None;
         self.file_content.clear();
+        self.file_preview_bytes = None;
         self.diff.clear();
         self.conflict_draft = None;
         self.patch_draft = None;
@@ -432,6 +435,7 @@ impl GritApp {
         self.notice = "Clone in progress…".into();
     }
     fn refresh(&mut self) {
+        self.preview_tools.invalidate();
         let Some(mut repo) = self.repo() else { return };
         self.history_options.query_cache = None;
         self.display_diff_key = None;
@@ -561,6 +565,10 @@ impl GritApp {
         }
     }
     fn preview_file(&mut self, path: &str) {
+        self.file_preview_bytes = self
+            .repo()
+            .and_then(|repo| preview_features::selected_file_pair(&repo, path, false, None).ok())
+            .and_then(|pair| pair.new.map(|blob| blob.bytes));
         self.selected_file = Some(path.to_owned());
         let Some(full_path) = self.path.as_ref().map(|root| root.join(path)) else {
             return;
@@ -2456,13 +2464,46 @@ impl GritApp {
                     }
                 });
                 ui.separator();
-                egui::ScrollArea::both()
-                    .id_salt("file_preview")
-                    .show(ui, |ui| {
-                        for (n, line) in self.file_content.lines().enumerate() {
-                            ui.label(RichText::new(format!("{:>5}   {line}", n + 1)).monospace());
+                self.preview_tools.encoding_selector(ui);
+                if let Some(bytes) = self.file_preview_bytes.take() {
+                    let key = format!("{:?}:{:?}", self.path, self.selected_file);
+                    let ctx = ui.ctx().clone();
+                    if !self.bytes_preview(ui, &ctx, &key, &bytes) {
+                        if bytes.len() > 4 * 1024 * 1024 {
+                            ui.label("Text preview exceeds 4 MiB. Use the external editor.");
+                        } else {
+                            match preview_features::decode_text(&bytes, self.preview_tools.encoding)
+                            {
+                                Ok(text) => {
+                                    egui::ScrollArea::both().id_salt("file_preview").show_rows(
+                                        ui,
+                                        18.,
+                                        text.lines().count(),
+                                        |ui, range| {
+                                            for (n, line) in text
+                                                .lines()
+                                                .enumerate()
+                                                .skip(range.start)
+                                                .take(range.len())
+                                            {
+                                                ui.label(
+                                                    RichText::new(format!("{:>5}   {line}", n + 1))
+                                                        .monospace(),
+                                                );
+                                            }
+                                        },
+                                    );
+                                }
+                                Err(error) => {
+                                    ui.colored_label(Color32::YELLOW, error);
+                                }
+                            }
                         }
-                    });
+                    }
+                    self.file_preview_bytes = Some(bytes);
+                } else {
+                    ui.label(&self.file_content);
+                }
             });
     }
     fn empty(&self, ui: &mut egui::Ui, title: &str, sub: &str) {
@@ -3151,6 +3192,7 @@ mod file_features;
 mod history_features;
 mod integration_features;
 mod metadata_features;
+mod preview_features;
 mod remote_features;
 mod repository_features;
 mod reset_features;

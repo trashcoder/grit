@@ -170,26 +170,84 @@ impl GritApp {
             ui.colored_label(Color32::LIGHT_RED, error);
         }
         ui.columns(2, |cols| {
-            egui::ScrollArea::vertical().id_salt("file_revision_list").show(&mut cols[0], |ui| {
-                let mut picked = None;
-                for (i, rev) in self.file_tools.revisions.iter().enumerate() {
-                    if ui.selectable_label(i == self.file_tools.selected, format!("{}  {}\n{}\n{}", rev.kind, &rev.id[..8.min(rev.id.len())], rev.summary, rev.date)).clicked() { picked = Some(i); }
-                }
-                if let Some(i) = picked { self.load_file_revision(i); }
-            });
+            egui::ScrollArea::vertical()
+                .id_salt("file_revision_list")
+                .show(&mut cols[0], |ui| {
+                    let mut picked = None;
+                    for (i, rev) in self.file_tools.revisions.iter().enumerate() {
+                        if ui
+                            .selectable_label(
+                                i == self.file_tools.selected,
+                                format!(
+                                    "{}  {}\n{}\n{}",
+                                    rev.kind,
+                                    &rev.id[..8.min(rev.id.len())],
+                                    rev.summary,
+                                    rev.date
+                                ),
+                            )
+                            .clicked()
+                        {
+                            picked = Some(i);
+                        }
+                    }
+                    if let Some(i) = picked {
+                        self.load_file_revision(i);
+                    }
+                });
             cols[1].horizontal(|ui| {
-                if ui.button("Previous").clicked() && self.file_tools.selected + 1 < self.file_tools.revisions.len() { self.load_file_revision(self.file_tools.selected + 1); }
-                if ui.button("Next").clicked() && self.file_tools.selected > 0 { self.load_file_revision(self.file_tools.selected - 1); }
-                if ui.button("Export revision…").clicked() { self.begin_file_export(); }
+                if ui.button("Previous").clicked()
+                    && self.file_tools.selected + 1 < self.file_tools.revisions.len()
+                {
+                    self.load_file_revision(self.file_tools.selected + 1);
+                }
+                if ui.button("Next").clicked() && self.file_tools.selected > 0 {
+                    self.load_file_revision(self.file_tools.selected - 1);
+                }
+                if ui.button("Export revision…").clicked() {
+                    self.begin_file_export();
+                }
             });
-            if self.file_tools.bytes.len() > MAX_PREVIEW_BYTES {
-                cols[1].label("Preview unavailable: file exceeds 4 MiB. Export the revision to inspect it.");
-            } else if self.file_tools.bytes.contains(&0) {
-                cols[1].label("Binary file; preview is unavailable. Export the revision to save the exact blob contents.");
+            let bytes = std::mem::take(&mut self.file_tools.bytes);
+            let key = format!(
+                "{:?}:{}:{}",
+                self.path,
+                self.file_tools.path,
+                self.file_tools
+                    .revisions
+                    .get(self.file_tools.selected)
+                    .and_then(|r| r.blob)
+                    .map(|id| id.to_string())
+                    .unwrap_or_default()
+            );
+            let ctx = cols[1].ctx().clone();
+            if self.bytes_preview(&mut cols[1], &ctx, &key, &bytes) {
+                // The cached image renderer owns this pane.
+            } else if bytes.len() > MAX_PREVIEW_BYTES {
+                cols[1].label(
+                    "Preview unavailable: file exceeds 4 MiB. Export the revision to inspect it.",
+                );
             } else {
-                let mut text = String::from_utf8_lossy(&self.file_tools.bytes).into_owned();
-                egui::ScrollArea::both().id_salt("file_revision_content").show(&mut cols[1], |ui| { ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_width(f32::INFINITY)); });
+                self.preview_tools.encoding_selector(&mut cols[1]);
+                match preview_features::decode_text(&bytes, self.preview_tools.encoding) {
+                    Ok(mut text) => {
+                        egui::ScrollArea::both()
+                            .id_salt("file_revision_content")
+                            .show(&mut cols[1], |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut text)
+                                        .code_editor()
+                                        .interactive(false)
+                                        .desired_width(f32::INFINITY),
+                                );
+                            });
+                    }
+                    Err(error) => {
+                        cols[1].colored_label(Color32::YELLOW, error);
+                    }
+                }
             }
+            self.file_tools.bytes = bytes;
         });
         if let Some((path, blob)) = self.file_tools.pending_export.clone() {
             let exists = fs::symlink_metadata(&path).is_ok();

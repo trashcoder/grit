@@ -83,8 +83,8 @@ Quelle: `DiffView/HunkWidget.cpp`, `DiffView/Images.cpp`, `FileContextMenu.cpp`,
 | Ignore für einzelne Dateien und Muster | Fehlt | Luna-Repositorypaket; escaping, bestehende `.gitignore`, Symlinks testen |
 | Alte/neue Zeilennummern und farbige Herkunft | Vorhanden | Diff-Origin-Regression vorhanden |
 | Dynamischer Zeilenumbruch | Fehlt | Renderoption, Patch-Rohdaten unverändert |
-| Kontextanzahl, Whitespace ignorieren, Encoding auswählen | Fehlt | Kontext und Whitespace in Runde 2; Nicht-UTF8-Encodingauswahl bleibt offen |
-| Bild-/Binärvorschau, gelöschte Bilder | Fehlt | Binärdateien sichtbar erkennen; Bildrenderer bleibt Ausbau |
+| Kontextanzahl, Whitespace ignorieren, Encoding auswählen | Fehlt | Kontext/Whitespace Runde 2; UTF-8, Latin-1, Windows-1252, UTF-16LE/BE mit strikter Vorschau Runde 3 |
+| Bild-/Binärvorschau, gelöschte Bilder | Fehlt | Runde 3: begrenzte Old/New-Bildvorschau auch für gelöschte historische Bilder |
 | Große Diffs erst nach Nachfrage laden | Fehlt | Größen-/Zeilenlimit und explizites »Load« ergänzen |
 | Dateiversion exportieren/mit Anwendung öffnen | Fehlt | Luna-Dateiversionspaket, bytegetreuer Export, Überschreibbestätigung |
 | Dateipfad kopieren, Dateiverlauf filtern, Executable-Bit ändern | Fehlt | Kontextmenüs schrittweise erweitern |
@@ -259,3 +259,11 @@ Abnahme: Sieben Tests prüfen echte Stashes mit Sonderzeichen im Namen, untracke
 Luna-Paket `external_diff_features`: Integrations speichert ausführbares Programm und Argumentvorlagen (ein Argument pro Zeile). Diff ersetzt `{old}`/`{new}` durch absolute temporäre Dateipfade; Working/Index/HEAD und historische erste-Parent-Versionen sind getrennte Quellen. Merge stellt `{base}`, `{ours}`, `{theirs}` aus den unaufgelösten Indexstufen und `{merged}` als geprüfte Arbeitsdatei bereit. Fehlende Konfliktseiten sind leere Dateien. Snapshots sind schreibgeschützt, bleiben bis zum Prozessende erhalten und werden danach entfernt. Der Merge-Ausgang wird nicht automatisch gestagt.
 
 Abnahme: Vier Tests starten ein eigenes Prüfprogramm mit Leerzeichen-Pfaden, prüfen tatsächliche Inhalte für alle Diffquellen und Cleanup. Ein echter Konflikt prüft drei Stufen und die geschriebene Arbeitsdatei, während der Index unaufgelöst bleibt. Traversal, Symlinks und ungültige Platzhalter werden abgewiesen; kein Shell-Parsing der Vorlagen.
+
+### Bildvorschau und Textencodings
+
+Luna-Paket `preview_features`: Changes und Commit-Diff zeigen alte/neue Bildversionen einschließlich hinzugefügter und gelöschter Bilder. Files und Dateiversionen zeigen ebenfalls eingebettete Bilder. PNG/JPEG/GIF/BMP/WebP werden durch die bereits transitiv verwendete Rust-Bildbibliothek dekodiert (GIF als statisches Bild). Quelldaten sind pro Auswahl gecacht; Textdateien lösen keinen Bild-Diff-Lesevorgang aus. Grenzen: 16 MiB Quelldaten, 16 Millionen Pixel, 64 MiB Dekodierbudget und 128 MiB/32 Einträge für Texturen. Größenprüfung erfolgt vor Blob-/Dateilesen; Quelldaten werden bei Refresh invalidiert.
+
+Textansichten bieten UTF-8, Latin-1, Windows-1252 und UTF-16LE/BE, einschließlich BOM-Erkennung. Dekodierfehler bleiben sichtbar. Alternative Diffencodings zeigen eine schreibgeschützte Old/New-Vorschau bis 4 MiB pro Seite; selektives Textstaging steht dort nicht zur Verfügung. Rohpatches werden nicht umkodiert.
+
+Abnahme: Drei Tests prüfen alle Encodings, ungültige UTF-Sequenzen, echte Repository-Versionen (Root/Add/Delete, Working/Index/Historie), Traversal und Bildgrößenlimits. Gesamtstand nach Integration: 84 Tests grün.

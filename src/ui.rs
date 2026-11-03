@@ -347,6 +347,10 @@ impl GritApp {
     }
 
     pub(super) fn diff_panel(&mut self, ui: &mut egui::Ui, max_height: f32) {
+        self.preview_tools.encoding_selector(ui);
+        if self.image_diff_preview(ui) || self.decoded_diff_preview(ui) {
+            return;
+        }
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut self.wrap_diff, "Wrap lines");
             self.diff_preferences_ui(ui);
