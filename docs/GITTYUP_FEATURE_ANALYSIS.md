@@ -104,7 +104,7 @@ Quelle: `CommitEditor.cpp`, `TemplateDialog.cpp`, `AmendDialog.cpp`, `MergeDialo
 | Branch erstellen, sicher löschen, Checkout | Vorhanden | Keine erzwungenen Löschungen |
 | Branch umbenennen | Fehlt | Luna-Repositorypaket |
 | Branch mergen; Konflikte fortführen/abbrechen | Rebase vorhanden, Merge-Start fehlt | Luna-Repositorypaket plus Merge-Abschluss in Changes |
-| Rebase, interaktives Rebase, Squash/Fixup/Drop | Vorhanden als Planeditor | Weitere grafische Planbedienung offen |
+| Rebase, interaktives Rebase, Squash/Fixup/Drop | Vorhanden als Planeditor | Runde 3: grafischer Plan mit Aktionen/Up/Down/Drop; Raw-Editor bleibt verfügbar |
 | Cherry-pick/Revert und deren Konfliktfortsetzung | Start vorhanden | Fortsetzen/Abbrechen zustandsabhängig ergänzen |
 | Detached Checkout / Branch an Commit | Vorhanden | Weiterverwenden |
 | Soft/Mixed/Hard Reset | Fehlt | In Runde 3 integriert: Ziel-OID, Modus und Folgen prüfen; Hard verlangt zusätzliche Bestätigung |
@@ -281,3 +281,9 @@ Luna-Paket `code_search_features`: Die separate Ansicht „Code & diff search“
 Grenzen werden in der UI angezeigt: maximal 2.000 Commits, 120.000 Diffzeilen, konservativ 32 MiB Textbudget und 3.000 Treffer. Merge-Diffs beziehen sich auf den ersten Parent. Lexikfelder nutzen Heuristiken für Rust/C/C++/JS/TS/Python und weitere einfache Kommentarformen, keinen vollständigen Sprachparser; unbekannter Code außerhalb eines Hunks kann den Lexikzustand beeinflussen. Alter/neuer Zustand werden getrennt pro Hunk geführt. Working tree ist nicht Bestandteil des Historyindexes.
 
 Abnahme: Zehn Tests prüfen Parserpriorität/Klammern/Fehler/quoted Operatorliterale, tatsächliche Add/Delete/Context/Hunk-Treffer, Strings/Kommentare/Identifier, Mehrzeilenheuristik, Branch-only-Historie, unborn Repositories, große Einzelzeilen und Worker-Cancel/Query-Coalescing.
+
+### Grafischer interaktiver Rebase-Plan
+
+Luna-Paket `rebase_features`: Der Rebase-Dialog zeigt Commits mit Aktionsauswahl (Pick/Reword/Edit/Squash/Fixup/Drop, einschließlich Fixup -c/-C), Auf/Ab-Steuerung und Drop-Toggle. Kommentare, komplexe Git-Anweisungen und unbekannte Formen bleiben unverändert erhalten; alternativ ist weiterhin der Raw-Editor verfügbar. Die Validierung prüft erneut nach Raw-Änderungen, ob Squash/Fixup einen früheren übernommenen Commit besitzt, und sperrt Ausführen bei Fehlern.
+
+Abnahme: Drei Tests prüfen Reorder, Aktionsänderungen, unveränderten Roundtrip inklusive Zeilenenden/Kommentaren/Advanced-Anweisungen und ungültige erste Squash/Fixup-Zeilen. Der vorhandene Git-Rebase-Worker führt den überprüften Plan aus.

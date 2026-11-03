@@ -1456,18 +1456,18 @@ impl GritApp {
                         .color(MUTED),
                     );
                     ui.add_space(8.);
-                    ui.add_sized(
-                        [ui.available_width(), 330.],
-                        egui::TextEdit::multiline(&mut plan)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(f32::INFINITY),
-                    );
+                    let _ = rebase_features::rebase_plan_ui(ui, &mut plan);
+                    egui::CollapsingHeader::new("Edit raw Git plan").show(ui, |ui| {
+                        ui.add_sized([ui.available_width(), 200.], egui::TextEdit::multiline(&mut plan).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY));
+                    });
+                    let validation = rebase_features::validate_plan(&plan);
+                    if let Err(error) = &validation { ui.colored_label(Color32::YELLOW, error); }
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
                             cancel = true;
                         }
                         if ui
-                            .add_enabled(!plan.trim().is_empty(), egui::Button::new("Run interactive rebase"))
+                            .add_enabled(validation.is_ok() && !plan.trim().is_empty() && self.operation.is_none(), egui::Button::new("Run interactive rebase"))
                             .clicked()
                         {
                             run = true;
@@ -3209,6 +3209,7 @@ mod history_features;
 mod integration_features;
 mod metadata_features;
 mod preview_features;
+mod rebase_features;
 mod remote_features;
 mod repository_features;
 mod reset_features;
