@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    file_actions: file_action_features::FileActions,
     worktree_tools: worktree_features::WorktreeTools,
     code_search: code_search_features::CodeSearchTools,
     preview_tools: preview_features::PreviewTools,
@@ -195,6 +196,7 @@ impl GritApp {
         }
     }
     fn reset_repo_selection(&mut self) {
+        self.file_actions = Default::default();
         self.code_search.cancel_for_repo_change(None);
         self.selected_commit = None;
         self.display_diff_key = None;
@@ -2446,6 +2448,8 @@ impl GritApp {
                                 self.preview_file(path);
                             }
                             response.on_hover_text(path).context_menu(|ui| {
+                                egui::CollapsingHeader::new("Executable bit")
+                                    .show(ui, |ui| self.executable_bit_ui(ui));
                                 if ui.button("File history…").clicked() {
                                     self.open_file_history(path.clone());
                                     ui.close_menu();
@@ -3204,6 +3208,7 @@ mod commit_features;
 mod diff_features;
 mod diff_preferences;
 mod external_diff_features;
+mod file_action_features;
 mod file_features;
 mod history_features;
 mod integration_features;

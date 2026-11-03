@@ -78,7 +78,7 @@ Quelle: `DiffView/HunkWidget.cpp`, `DiffView/Images.cpp`, `FileContextMenu.cpp`,
 | Einzelne Hunks stagen | Vorhanden | Gegen falschen oder veralteten Patch absichern |
 | Einzelne Zeilen auswählen und stagen/unstagen | Nur manuelles Patch-Editing | Luna-Patchpaket; echte Apply-Tests für Vorwärts-/Rückwärtsrichtung |
 | Tastatur S/U/R und Markierung im Diff | Fehlt | S/U für selektierte Änderungen; Discard weiter mit Bestätigung |
-| Dateien/ausgewählte Änderungen verwerfen | Dateien vorhanden | Zeilenweises Discard bleibt getrennte, bestätigte Funktion |
+| Dateien/ausgewählte Änderungen verwerfen | Dateien vorhanden | Runde 3: bestätigter selektiver Reverse-Patch im Worktree mit Snapshot-Prüfung |
 | Ungetrackte Dateien ausblenden | Fehlt | Anzeigepräferenz; Daten nicht verändern |
 | Ignore für einzelne Dateien und Muster | Fehlt | Luna-Repositorypaket; escaping, bestehende `.gitignore`, Symlinks testen |
 | Alte/neue Zeilennummern und farbige Herkunft | Vorhanden | Diff-Origin-Regression vorhanden |
@@ -87,7 +87,7 @@ Quelle: `DiffView/HunkWidget.cpp`, `DiffView/Images.cpp`, `FileContextMenu.cpp`,
 | Bild-/Binärvorschau, gelöschte Bilder | Fehlt | Runde 3: begrenzte Old/New-Bildvorschau auch für gelöschte historische Bilder |
 | Große Diffs erst nach Nachfrage laden | Fehlt | Größen-/Zeilenlimit und explizites »Load« ergänzen |
 | Dateiversion exportieren/mit Anwendung öffnen | Fehlt | Luna-Dateiversionspaket, bytegetreuer Export, Überschreibbestätigung |
-| Dateipfad kopieren, Dateiverlauf filtern, Executable-Bit ändern | Fehlt | Kontextmenüs schrittweise erweitern |
+| Dateipfad kopieren, Dateiverlauf filtern, Executable-Bit ändern | Fehlt | Copy path/History vorhanden; Runde 3: expliziter Index-Executable-Schalter |
 | Externer Editor/Diff/Merge | Fehlt | Runde 3: Editor, externe Diff-/Merge-Werkzeuge mit argv-Vorlagen und temporären Dateiversionen |
 
 ### Commits, Branches und Konflikte
@@ -287,3 +287,11 @@ Abnahme: Zehn Tests prüfen Parserpriorität/Klammern/Fehler/quoted Operatorlite
 Luna-Paket `rebase_features`: Der Rebase-Dialog zeigt Commits mit Aktionsauswahl (Pick/Reword/Edit/Squash/Fixup/Drop, einschließlich Fixup -c/-C), Auf/Ab-Steuerung und Drop-Toggle. Kommentare, komplexe Git-Anweisungen und unbekannte Formen bleiben unverändert erhalten; alternativ ist weiterhin der Raw-Editor verfügbar. Die Validierung prüft erneut nach Raw-Änderungen, ob Squash/Fixup einen früheren übernommenen Commit besitzt, und sperrt Ausführen bei Fehlern.
 
 Abnahme: Drei Tests prüfen Reorder, Aktionsänderungen, unveränderten Roundtrip inklusive Zeilenenden/Kommentaren/Advanced-Anweisungen und ungültige erste Squash/Fixup-Zeilen. Der vorhandene Git-Rebase-Worker führt den überprüften Plan aus.
+
+### Selektives Discard und Executable-Bit
+
+Luna-Paket `file_action_features`: Markierte ungestagte UTF-8-Diffzeilen können über „Discard selected unstaged lines“ oder R geprüft und bestätigt verworfen werden. Die Vorschau enthält den tatsächlich angewendeten Reverse-Patch. Repository, symbolischer HEAD, ursprünglicher Diff, Auswahl und Indexzustand werden vor Review und im Worker erneut geprüft. Git wendet den Patch ausschließlich im Arbeitsbaum an; der Index bleibt erhalten. Bei Whitespacefilter, alternativem Textencoding, staged Auswahl oder laufender Operation ist die Funktion nicht erreichbar.
+
+Files → Executable bit bietet einen expliziten Schalter für den Indexmodus regulärer getrackter Dateien. Symlinks, Submodule und Konfliktstufen sind ausgeschlossen. Arbeitsdatei und Betriebssystemrechte werden nicht verändert.
+
+Abnahme: Vier echte Git-Tests prüfen context 0/3, mehrere Hunks, gemischte Ergänzungen/Löschungen, CRLF, neue/gelöschte Dateien, unveränderten Index und erhaltene übrige Änderungen, stale Review sowie literal Dateipfade beim Moduswechsel.

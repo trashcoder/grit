@@ -377,6 +377,7 @@ impl GritApp {
             HashSet::new()
         };
         if interactive {
+            self.selected_discard_ui(ui);
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .add_enabled(
