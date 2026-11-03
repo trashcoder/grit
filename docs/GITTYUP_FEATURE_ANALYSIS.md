@@ -1,6 +1,6 @@
 # GittyUp → grit: Funktionsanalyse und Implementierungsplan
 
-Stand: 2. November 2026. Ziel: native Rust-Implementierung mit egui und libgit2; vertraute GittyUp-Arbeitsabläufe. Dies ist eine überprüfbare Bestandsaufnahme, keine Behauptung vollständiger Funktionsgleichheit.
+Stand: 3. November 2026. Ziel: native Rust-Implementierung mit egui und libgit2; vertraute GittyUp-Arbeitsabläufe. Dies ist eine überprüfbare Bestandsaufnahme, keine Behauptung vollständiger Funktionsgleichheit.
 
 ## Referenz und Methode
 
@@ -107,7 +107,7 @@ Quelle: `CommitEditor.cpp`, `TemplateDialog.cpp`, `AmendDialog.cpp`, `MergeDialo
 | Rebase, interaktives Rebase, Squash/Fixup/Drop | Vorhanden als Planeditor | Weitere grafische Planbedienung offen |
 | Cherry-pick/Revert und deren Konfliktfortsetzung | Start vorhanden | Fortsetzen/Abbrechen zustandsabhängig ergänzen |
 | Detached Checkout / Branch an Commit | Vorhanden | Weiterverwenden |
-| Soft/Mixed/Hard Reset | Fehlt | Eigene explizite Ziel-/Auswirkungsbestätigung nötig; kein Force-Shortcut |
+| Soft/Mixed/Hard Reset | Fehlt | In Runde 3 integriert: Ziel-OID, Modus und Folgen prüfen; Hard verlangt zusätzliche Bestätigung |
 | Leichte und annotierte Tags, Löschen | Nur leichtes Tag | Annotieren/Löschen im Luna-Repositorypaket |
 | Tag aus bestehendem Namen ableiten; Tag pushen/ersetzen | Fehlt | Tagliste als Vorlage; Force bleibt gesonderter Ausbau |
 | Stash speichern, anwenden, poppen, löschen | Vorhanden | Eigene Namen/Optionen ergänzen |
@@ -221,3 +221,11 @@ Abnahme: 47 Tests insgesamt grün; echte Repos mit zwei Autoren prüfen historis
 Luna-Paket `file_tree`: List-/Tree-Umschaltung für Files, Commit-Dateien und beide Changes-Listen. Verzeichnisse stehen vor Dateien und sind alphabetisch sortiert; alle Aktionen behalten den vollständigen ursprünglichen Dateipfad. Statusmarker A/M/D bleiben sichtbar. Ordner lassen sich über Pfeil oder Namen aufklappen. Die Zustands-IDs enthalten Repository, Listenart und vollständigen Pfad, damit staged/unstaged dieselben Ordner unabhängig öffnen können. Zeilen und Ordnerheader sind auf die verfügbare Breite begrenzt; lange Namen sind im Hover vollständig sichtbar. Stage/Unstage und bestätigtes Discard sind im Baum über die Auswahl-Werkzeugleiste erreichbar. Der Listenmodus bleibt erhalten; die Moduswahl wird gespeichert.
 
 Abnahme: 51 Tests insgesamt grün, Clippy und Formatprüfung erfolgreich. Pure Baumtests prüfen verschachtelte/Unicode-/Backslash-Pfade, Dateiverzeichnis-Präfixe und stabile Reihenfolge. Sichtprüfung bei 980 × 680 sowie Klicktest für Stage/Unstage eines verschachtelten Dateipfads: Index enthielt exakt `src/core/parser.rs`, danach wieder keinen Pfad; die SHA-256-Prüfsumme der Arbeitsdatei blieb gleich.
+
+## Dritte Implementierungsrunde
+
+### Soft-, Mixed- und Hard-Reset
+
+Luna-Paket `reset_workflows`: Repository Tools bietet einen Reset auf den im Verlauf ausgewählten Commit. Die Bestätigung ist an Repository, symbolischen HEAD, aktuelle HEAD-OID, Ziel und Modus gebunden. Ein Branchwechsel bei gleicher OID lässt sie verfallen. Aktive Merge-/Rebase-/Cherry-pick-Operationen sperren Reset; vorhandene lokale Änderungen bleiben entsprechend dem gewählten Modus zulässig. Hard verlangt zusätzlich die ausdrückliche Anerkennung des Datenverlusts, einschließlich ungetrackter Dateien, die einem Checkout im Weg stehen.
+
+Abnahme: vier Tests gegen echte temporäre Repositories prüfen Soft mit verändertem Index, Mixed/Hard, symbolischen Branchwechsel und laufenden Mergezustand. Die Ziele werden zu Commits aufgelöst und als vollständige OID über argv an Git übergeben.
