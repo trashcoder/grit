@@ -430,6 +430,11 @@ impl GritApp {
             return;
         }
         let patch = self.display_diff.clone();
+        let code_font = egui::TextStyle::Monospace.resolve(ui.style());
+        let number_font =
+            egui::FontId::new((code_font.size - 1.).max(9.), code_font.family.clone());
+        let scale = code_font.size / 12.;
+        let text_offset = 110. * scale;
         egui::ScrollArea::both()
             .id_salt("diff_content")
             .auto_shrink([false, false])
@@ -495,15 +500,17 @@ impl GritApp {
                     let galley = if self.wrap_diff {
                         ui.painter().layout(
                             line.to_owned(),
-                            FontId::monospace(12.),
+                            code_font.clone(),
                             color,
-                            (ui.available_width() - 120.).max(60.),
+                            (ui.available_width() - text_offset - 10.).max(60.),
                         )
                     } else {
                         ui.painter()
-                            .layout_no_wrap(line.to_owned(), FontId::monospace(12.), color)
+                            .layout_no_wrap(line.to_owned(), code_font.clone(), color)
                     };
-                    let width = ui.available_width().max(galley.size().x + 120.);
+                    let width = ui
+                        .available_width()
+                        .max(galley.size().x + text_offset + 10.);
                     let height = (galley.size().y + 4.).max(19.);
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(width, height),
@@ -544,24 +551,27 @@ impl GritApp {
                             self.selected_diff_lines.insert(i);
                         }
                     }
-                    for (offset, number) in [(49., old), (90., new)] {
+                    for (offset, number) in [(49. * scale, old), (90. * scale, new)] {
                         ui.painter().text(
-                            egui::pos2(rect.left() + offset, rect.top() + 9.5),
+                            egui::pos2(
+                                rect.left() + offset,
+                                rect.top() + (galley.size().y + 4.) / 2.,
+                            ),
                             egui::Align2::RIGHT_CENTER,
                             number,
-                            FontId::monospace(11.),
+                            number_font.clone(),
                             muted(),
                         );
                     }
                     ui.painter().line_segment(
                         [
-                            rect.left_top() + egui::vec2(100., 0.),
-                            rect.left_bottom() + egui::vec2(100., 0.),
+                            rect.left_top() + egui::vec2(100. * scale, 0.),
+                            rect.left_bottom() + egui::vec2(100. * scale, 0.),
                         ],
                         Stroke::new(1., border()),
                     );
                     ui.painter()
-                        .galley(rect.min + egui::vec2(110., 2.), galley, color);
+                        .galley(rect.min + egui::vec2(text_offset, 2.), galley, color);
                 }
             });
     }

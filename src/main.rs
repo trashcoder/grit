@@ -1744,11 +1744,15 @@ impl GritApp {
             } else {
                 (lane_count as f32 * 16. + 16.).clamp(64., 180.)
             };
-            let row_height = if self.history_options.compact {
+            let body_font = egui::TextStyle::Body.resolve(ui.style());
+            let small_font = egui::TextStyle::Small.resolve(ui.style());
+            let mono_font = egui::TextStyle::Monospace.resolve(ui.style());
+            let row_height = (if self.history_options.compact {
                 23.
             } else {
                 28.
-            };
+            } as f32)
+                .max(body_font.size + 10.);
             let width = ui
                 .available_width()
                 .min(ui.ctx().screen_rect().right() - ui.min_rect().left() - 8.);
@@ -1810,7 +1814,7 @@ impl GritApp {
                     egui::pos2(header.left() + x, header.center().y),
                     egui::Align2::LEFT_CENTER,
                     label,
-                    FontId::proportional(11.),
+                    small_font.clone(),
                     muted(),
                 );
             }
@@ -1859,7 +1863,7 @@ impl GritApp {
                             egui::pos2(x, rect.center().y),
                             egui::Align2::LEFT_CENTER,
                             "★",
-                            FontId::proportional(13.),
+                            body_font.clone(),
                             theme_color([235, 190, 90], [140, 96, 8]),
                         );
                         x += 18.;
@@ -1870,11 +1874,8 @@ impl GritApp {
                     );
                     let painter = ui.painter().with_clip_rect(message_clip);
                     for reference in &commit.refs {
-                        let galley = painter.layout_no_wrap(
-                            reference.clone(),
-                            FontId::proportional(11.),
-                            green(),
-                        );
+                        let galley =
+                            painter.layout_no_wrap(reference.clone(), small_font.clone(), green());
                         let badge = egui::Rect::from_min_size(
                             egui::pos2(x, rect.top() + 5.),
                             galley.size() + egui::vec2(10., 4.),
@@ -1887,7 +1888,7 @@ impl GritApp {
                         egui::pos2(x, rect.center().y),
                         egui::Align2::LEFT_CENTER,
                         &commit.message,
-                        FontId::proportional(13.),
+                        body_font.clone(),
                         text(),
                     );
                     for (left, right, value, mono) in [
@@ -1907,9 +1908,9 @@ impl GritApp {
                             egui::Align2::LEFT_CENTER,
                             value,
                             if mono {
-                                FontId::monospace(11.)
+                                mono_font.clone()
                             } else {
-                                FontId::proportional(12.)
+                                small_font.clone()
                             },
                             muted(),
                         );

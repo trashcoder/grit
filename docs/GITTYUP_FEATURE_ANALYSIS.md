@@ -327,3 +327,13 @@ Verifizierte Primärquellen für die Browserworkflows: [GitHub PR Query-Paramete
 ### Korrektur: Unstage gelöschter Zeilen bei Kontext 0
 
 Die Abnahme des selektiven Discard deckte einen gemeinsamen Patchfehler auf: Eine umgekehrte reine Löschung muss die Einfügeposition für `--unidiff-zero` berücksichtigen. Die Korrektur liegt nun zentral in `diff_features::selected_patch`; ein bisher nur auf Discard angewandter Workaround wurde entfernt. Eine echte Git-Regression stagt drei entfernte Löschungen, unstagt selektiv zwei davon und prüft exakt wiederhergestellte Indexzeilen, verbleibende staged Löschung und unveränderten Arbeitsbaum. Die bisherigen Patch-/Discard-Tests und Clippy bleiben grün.
+
+### Schriftgröße in Verlauf und Diff
+
+Die Settings-Schriftgröße/-familie wird nun auch vom selbst gezeichneten Commitverlauf und Diff übernommen. Verlaufzeilen wachsen mit der Schrift; Difftext, Zeilennummern und Gutter skalieren zusammen. Die bisherigen festen 11–13-Punkt-Fonts sind dort entfernt. Native Sichtprüfung mit größerer Schrift (18 pt) bestätigte lesbare Verlaufzeilen und Diffdarstellung.
+
+Abnahme vor der Pause: **106 Tests bestanden**, Clippy mit `-D warnings` sowie Format-/Diffprüfung erfolgreich. Die lokalen IPC-Tests wurden außerhalb der Socket-Sandbox ausgeführt. Der vierte Commit nach AppImage `eebfcf1` umfasst diese Korrektur; dazu wird ein weiterer AppImage-Zwischenstand aus exakt denselben Quellen vorbereitet.
+
+### Pausenübergabe
+
+Auf ausdrücklichen Benutzerwunsch wird nach diesem Commit pausiert. Das Gesamtziel ist nicht abgeschlossen. Hosting-Account-/PR-APIs, vollständige Übersetzung, native SHA-256-Unterstützung, Updater und Plugins bleiben offen; Einzelgrenzen stehen in der Matrix und den Abnahmen. Der unfertige Luna-Entwurf für Blame-Heatmap/Copy-Move liegt unverändert gesichert unter `target/paused-work/blame_features.rs.wip` und ist weder eingebunden noch Teil des Pakets. Beim Fortsetzen sind dort zuerst die `git blame`-Pfadübergabe, Newlines im Copy-Test und die Persistenzintegration zu korrigieren. Der letzte freigegebene Blame-Code bleibt im Quellbaum erhalten.
