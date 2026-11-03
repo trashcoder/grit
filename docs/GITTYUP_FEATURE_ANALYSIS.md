@@ -100,7 +100,7 @@ Quelle: `CommitEditor.cpp`, `TemplateDialog.cpp`, `AmendDialog.cpp`, `MergeDialo
 | Wiederverwendbare Commit-Vorlage und Git `commit.template` | Fehlt | Luna-Commitpaket; nicht ungefragt vorhandene Eingabe überschreiben |
 | Mehrere benannte Vorlagen, Sortieren/Import/Export | Fehlt | Weiterer Ausbau nach einfacher Vorlage |
 | Commit-Autor überschreiben, Sign-off | Fehlt | Luna-Commitpaket; argv, Identität und echte Commit-Metadaten testen |
-| Autor/Committer-Zeitstempel gezielt ändern | Fehlt | Eigener Amend-Dialog als späterer Ausbau |
+| Autor/Committer-Zeitstempel gezielt ändern | Fehlt | Runde 3: eigener Amend-Dialog für separate Autor-/Committer-Identität und Zeit mit Offset |
 | Branch erstellen, sicher löschen, Checkout | Vorhanden | Keine erzwungenen Löschungen |
 | Branch umbenennen | Fehlt | Luna-Repositorypaket |
 | Branch mergen; Konflikte fortführen/abbrechen | Rebase vorhanden, Merge-Start fehlt | Luna-Repositorypaket plus Merge-Abschluss in Changes |
@@ -229,3 +229,9 @@ Abnahme: 51 Tests insgesamt grün, Clippy und Formatprüfung erfolgreich. Pure B
 Luna-Paket `reset_workflows`: Repository Tools bietet einen Reset auf den im Verlauf ausgewählten Commit. Die Bestätigung ist an Repository, symbolischen HEAD, aktuelle HEAD-OID, Ziel und Modus gebunden. Ein Branchwechsel bei gleicher OID lässt sie verfallen. Aktive Merge-/Rebase-/Cherry-pick-Operationen sperren Reset; vorhandene lokale Änderungen bleiben entsprechend dem gewählten Modus zulässig. Hard verlangt zusätzlich die ausdrückliche Anerkennung des Datenverlusts, einschließlich ungetrackter Dateien, die einem Checkout im Weg stehen.
 
 Abnahme: vier Tests gegen echte temporäre Repositories prüfen Soft mit verändertem Index, Mixed/Hard, symbolischen Branchwechsel und laufenden Mergezustand. Die Ziele werden zu Commits aufgelöst und als vollständige OID über argv an Git übergeben.
+
+### Autor-/Committer-Metadaten und Zeitstempel
+
+Luna-Paket `commit_metadata`: Im Commit-Optionsfenster öffnet „Edit HEAD metadata“ den vollständigen Committext und getrennte Autor-/Committer-Felder einschließlich RFC3339-Zeit mit Zeitzonenoffset. Review zeigt Alt/Neu. Der Worker prüft HEAD-OID, symbolische Referenz und inaktiven Operationszustand erneut. `commit --amend --only --no-edit --reset-author` übernimmt explizite Identitäten/Datumswerte und lässt vorhandene Indexänderungen aus dem Commit heraus. Der gemeinsame Operationsworker sperrt parallele Git-Aktionen.
+
+Abnahme: Echter Git-Test über die Produktionsfunktion prüft beide Identitäten, Zeitstempel und Offsets sowie unveränderte Nachricht, Commit-Tree und vorgemerkten Index-Tree. Der Test fand und korrigierte die fehlende `--reset-author`-Option.

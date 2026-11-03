@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    metadata_tools: metadata_features::MetadataTools,
     reset_tools: reset_features::ResetTools,
     tree_mode: bool,
     blame_state: blame_features::BlameState,
@@ -188,6 +189,7 @@ impl GritApp {
         self.display_diff_key = None;
         self.blame_state = Default::default();
         self.reset_tools = Default::default();
+        self.metadata_tools = Default::default();
         self.repo_tools = Default::default();
         self.file_tools = Default::default();
         self.selected_diff_lines.clear();
@@ -3088,7 +3090,10 @@ impl eframe::App for GritApp {
                     ui.set_max_width(600.);
                     egui::ScrollArea::vertical()
                         .max_height(500.)
-                        .show(ui, |ui| self.commit_options_ui(ui));
+                        .show(ui, |ui| {
+                            self.commit_options_ui(ui);
+                            self.metadata_tools_ui(ui);
+                        });
                 });
             self.show_commit_options = open;
         }
@@ -3165,6 +3170,7 @@ impl eframe::App for GritApp {
             });
     }
 }
+mod metadata_features;
 mod reset_features;
 mod blame_features;
 mod commit_features;
