@@ -122,11 +122,15 @@ fn append_pattern(root: &Path, pattern: &str) -> Result<String, String> {
 impl GritApp {
     pub(super) fn repository_tools_view(&mut self, ui: &mut egui::Ui) {
         ui.heading("Repository tools");
-        ui.checkbox(&mut self.watcher.paused, "Pause automatic local change detection");
+        ui.checkbox(
+            &mut self.watcher.paused,
+            "Pause automatic local change detection",
+        );
         if let Some(error) = &self.watcher.error {
             ui.colored_label(Color32::YELLOW, error);
         }
         self.reset_tools_ui(ui);
+        egui::CollapsingHeader::new("Stash options").show(ui, |ui| self.stash_options_ui(ui));
         if self.path.is_none() {
             ui.label("Open a repository to use these tools.");
             return;

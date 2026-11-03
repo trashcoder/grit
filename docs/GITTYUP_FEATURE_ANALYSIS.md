@@ -110,7 +110,7 @@ Quelle: `CommitEditor.cpp`, `TemplateDialog.cpp`, `AmendDialog.cpp`, `MergeDialo
 | Soft/Mixed/Hard Reset | Fehlt | In Runde 3 integriert: Ziel-OID, Modus und Folgen prüfen; Hard verlangt zusätzliche Bestätigung |
 | Leichte und annotierte Tags, Löschen | Nur leichtes Tag | Annotieren/Löschen im Luna-Repositorypaket |
 | Tag aus bestehendem Namen ableiten; Tag pushen/ersetzen | Fehlt | Tagliste als Vorlage; Force bleibt gesonderter Ausbau |
-| Stash speichern, anwenden, poppen, löschen | Vorhanden | Eigene Namen/Optionen ergänzen |
+| Stash speichern, anwenden, poppen, löschen | Vorhanden | Runde 3: Namen, untracked/keep-index/staged-only und optionale Index-Wiederherstellung |
 | Konflikte Dateiweise ours/theirs/manuell lösen | Vorhanden | Binärspezifische Vorschau fehlt; kein Auto-Abbruch nach Konflikt |
 
 ### Remotes, Hosting und größere Repositories
@@ -247,3 +247,9 @@ Abnahme: Ein echter Repositorytest prüft stabile Fingerabdrücke sowie Worktree
 Luna-Paket `remote_workflows`: Remotes bietet Branch-/Remote-Auswahl, Upstream-Konfiguration und Tag-Push. Pushes verwenden eine aufgelöste vollständige Quell-OID und `--no-follow-tags`, damit persönliche Git-Konfiguration keine weiteren Tags ergänzt. Force-with-lease zeigt explizite Quell-/Zielreferenz und die beobachtete OID des exakt gewählten Remote-Tracking-Branches. Die Bestätigung bindet Repository, symbolischen HEAD/OID, Remote-URLs und sämtliche Ziele; Änderungen verwerfen sie. Git prüft die erwartete OID nochmals serverseitig.
 
 Automatisches Fetch ist standardmäßig aus, wird pro Repository gespeichert und läuft nur für das aktuell geöffnete Repository nach dem gewählten Intervall. Prune ist separat wählbar. Abnahme: Zwei Tests prüfen die Produktions-Argumentbuilder und echte Tracking-/Tag-/Lease-Abläufe gegen ein lokales Bare-Remote; ein inzwischen geänderter Remote-Branch lehnt die veraltete Lease ab. Kein Test kontaktiert einen Hosting-Dienst.
+
+### Benannte Stashes und Wiederherstellungsoptionen
+
+Luna-Paket `stash_features`: Repository Tools → Stash options bietet Namen, explizites Include untracked, Keep index oder Staged only (Git ≥ 2.35). Ungültige Kombinationen sind gesperrt; Folgen werden vor dem Erstellen angezeigt. Apply/Pop kann den Indexzustand optional wiederherstellen. Die Auswahl ist an Repository und Stash-OID gebunden; ein verschobenes `stash@{n}` wird abgelehnt. Drop hat eine eigene OID-gebundene Bestätigung. Der Sidebar-Einstieg führt zu den gemeinsamen Werkzeugen.
+
+Abnahme: Sieben Tests prüfen echte Stashes mit Sonderzeichen im Namen, untracked Standard/Opt-in, Keep index, Staged only, Index-Restore und OID-Änderungen. Git kann überlappende ungestagte Änderungen bei Staged only ablehnen; die UI nennt diese Grenze und zeigt Git-Fehler unverändert an.

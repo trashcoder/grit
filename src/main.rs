@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    stash_tools: stash_features::StashTools,
     remote_tools: remote_features::RemoteTools,
     watcher: watcher_features::RepositoryWatcher,
     metadata_tools: metadata_features::MetadataTools,
@@ -109,7 +110,6 @@ struct GritApp {
     operation: Option<(String, Receiver<Result<String, String>>)>,
     open_after_operation: Option<PathBuf>,
     pending_discard: Option<String>,
-    pending_stash_drop: Option<usize>,
     pending_init: Option<PathBuf>,
     rebase_draft: Option<(String, String)>,
     conflict_draft: Option<(String, String)>,
@@ -191,6 +191,7 @@ impl GritApp {
         self.display_diff_key = None;
         self.blame_state = Default::default();
         self.reset_tools = Default::default();
+        self.stash_tools = Default::default();
         self.metadata_tools = Default::default();
         self.watcher = Default::default();
         self.repo_tools = Default::default();
@@ -208,7 +209,6 @@ impl GritApp {
         self.conflict_draft = None;
         self.patch_draft = None;
         self.pending_discard = None;
-        self.pending_stash_drop = None;
         self.pending_init = None;
         self.rebase_draft = None;
         self.branch_has_upstream = false;
@@ -1262,26 +1262,11 @@ impl GritApp {
         )
         .default_open(false)
         .show(ui, |ui| {
-            for (index, message) in self.stashes.clone() {
-                ui.label(RichText::new(&message).small())
-                    .context_menu(|ui| {
-                        let reference = format!("stash@{{{index}}}");
-                        if ui.button("Apply").clicked() {
-                            self.git_action(
-                                "Apply stash",
-                                &["stash", "apply", "--index", &reference],
-                            );
-                            ui.close_menu();
-                        }
-                        if ui.button("Pop").clicked() {
-                            self.git_action("Pop stash", &["stash", "pop", "--index", &reference]);
-                            ui.close_menu();
-                        }
-                        if ui.button("Drop…").clicked() {
-                            self.pending_stash_drop = Some(index);
-                            ui.close_menu();
-                        }
-                    });
+            for (_, message) in self.stashes.clone() {
+                ui.label(RichText::new(&message).small());
+            }
+            if ui.button("Manage stashes…").clicked() {
+                self.tab = 6;
             }
         });
     }
@@ -1406,37 +1391,7 @@ impl GritApp {
                     });
                 });
         }
-        if let Some(index) = self.pending_stash_drop {
-            egui::Window::new("Drop stash?")
-                .collapsible(false)
-                .resizable(false)
-                .show(ui.ctx(), |ui| {
-                    ui.label(
-                        RichText::new(format!(
-                            "Permanently drop stash@{{{index}}}? This cannot be undone."
-                        ))
-                        .color(TEXT),
-                    );
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            self.pending_stash_drop = None;
-                        }
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("Drop stash").color(Color32::WHITE).strong(),
-                                )
-                                .fill(Color32::from_rgb(161, 62, 69)),
-                            )
-                            .clicked()
-                        {
-                            self.pending_stash_drop = None;
-                            let reference = format!("stash@{{{index}}}");
-                            self.git_action("Drop stash", &["stash", "drop", &reference]);
-                        }
-                    });
-                });
-        }
+
         if let Some(path) = self.pending_init.clone() {
             egui::Window::new("Initialize Git repository?")
                 .collapsible(false)
@@ -3183,10 +3138,6 @@ impl eframe::App for GritApp {
             });
     }
 }
-mod remote_features;
-mod watcher_features;
-mod metadata_features;
-mod reset_features;
 mod blame_features;
 mod commit_features;
 mod diff_features;
@@ -3194,11 +3145,16 @@ mod diff_preferences;
 mod file_features;
 mod history_features;
 mod integration_features;
+mod metadata_features;
+mod remote_features;
 mod repository_features;
+mod reset_features;
+mod stash_features;
 #[cfg(test)]
 mod tests;
 mod tree_features;
 mod ui;
+mod watcher_features;
 
 fn main() -> eframe::Result<()> {
     let mut args = std::env::args_os().skip(1);
