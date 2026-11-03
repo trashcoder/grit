@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    remote_tools: remote_features::RemoteTools,
     watcher: watcher_features::RepositoryWatcher,
     metadata_tools: metadata_features::MetadataTools,
     reset_tools: reset_features::ResetTools,
@@ -2357,6 +2358,7 @@ impl GritApp {
                 );
             });
         });
+        self.advanced_remotes_ui(ui);
         ui.add_space(8.);
         if let Some(repo) = self.repo()
             && let Ok(names) = repo.remotes()
@@ -2909,6 +2911,13 @@ impl eframe::App for GritApp {
             .collect::<Vec<_>>()
             .join("\n");
         storage.set_string("recent_repositories", paths);
+        for path in self.open_repos.iter().chain(&self.recent_repos) {
+            let key = history_features::repo_storage_key(path);
+            storage.set_string(
+                &format!("remote_preferences:{key}"),
+                history_features::encode_records(&self.remote_tools.persistence_strings(&key)),
+            );
+        }
         storage.set_string("file_tree_mode", self.tree_mode.to_string());
         storage.set_string("external_editor", self.integrations.editor_program.clone());
         storage.set_string("commit_template", self.commit_options.template.clone());
@@ -3054,6 +3063,7 @@ impl eframe::App for GritApp {
         }
         self.was_focused = focused;
         self.poll_repository_watcher(ctx);
+        self.poll_auto_fetch(ctx);
         if self.operation.is_none()
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Q))
         {
@@ -3173,6 +3183,7 @@ impl eframe::App for GritApp {
             });
     }
 }
+mod remote_features;
 mod watcher_features;
 mod metadata_features;
 mod reset_features;
@@ -3289,6 +3300,11 @@ fn main() -> eframe::Result<()> {
                 }
                 for path in app.open_repos.iter().chain(&app.recent_repos) {
                     let key = history_features::repo_storage_key(path);
+                    if let Some(saved) = storage.get_string(&format!("remote_preferences:{key}"))
+                        && let Ok(values) = history_features::decode_records(&saved)
+                    {
+                        app.remote_tools.load_persistence_strings(&key, &values);
+                    }
                     let stars = storage
                         .get_string(&format!("commit_stars:{key}"))
                         .unwrap_or_default()

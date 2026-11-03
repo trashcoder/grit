@@ -120,9 +120,9 @@ Quelle: `RemoteDialog.cpp`, `ConfigDialog.cpp`, `UpdateSubmodulesDialog.cpp`, `R
 | Funktion | grit am Anfang | Umsetzung / Abnahme |
 |---|---|---|
 | Remotes verwalten, fetch, pull, push, upstream veröffentlichen | Vorhanden | Pull derzeit ausdrücklich nur fast-forward |
-| Bestimmten Remote/Branch wählen, Tracking konfigurieren | Teilweise | Detailverwaltung weiter ausbauen |
-| Automatisches Fetch und Prune-Option | Prune bei manuellem Fetch | Automatisches Netzwerkverhalten als Opt-in, kein heimlicher Default |
-| Push force-with-lease / Tags | Fehlt | Gesonderte Ziel- und Auswirkungenkontrolle |
+| Bestimmten Remote/Branch wählen, Tracking konfigurieren | Teilweise | Runde 3: gezielter Branchpush und Upstream-Auswahl |
+| Automatisches Fetch und Prune-Option | Prune bei manuellem Fetch | Runde 3: pro Repository gespeichertes Opt-in mit Intervall und Prune |
+| Push force-with-lease / Tags | Fehlt | Runde 3: bestätigte Tags und Force-with-lease mit gepinnter Quelle/Ziel/Erwartungs-OID |
 | Git-Credential-Helper und SSH-Agent | System-Git vorhanden | Kein eigener unsicherer Passwortspeicher |
 | Hosting-Konten: GitHub/GitLab/Gitea/Bitbucket/Beanstalk | Fehlt | GittyUp besitzt konkrete Adapter; API-Featureparität offen |
 | Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Authentifizierung, Accountbindung und Browser/API-Integration erforderlich |
@@ -241,3 +241,9 @@ Abnahme: Echter Git-Test über die Produktionsfunktion prüft beide Identitäten
 Der Repository-Watcher berechnet alle zwei Sekunden im Hintergrund einen Fingerabdruck aus Referenzen, Indexeinträgen, Status und Dateimetadaten. Er erkennt auch erneute Bearbeitung bereits veränderter Dateien, neue ungetrackte Dateien sowie Branch-/Stash-/Indexänderungen. Änderungen aktualisieren die Ansichten auch ohne Fokuswechsel. Eine laufende Git-Aktion verzögert Refresh, Repositorywechsel verwerfen fremde Ergebnisse; Repository Tools bietet Pause und sichtbare Fehler. Kein Netzwerkzugriff.
 
 Abnahme: Ein echter Repositorytest prüft stabile Fingerabdrücke sowie Worktree-Bearbeitung, erneute Bearbeitung, Index, Branch, verschachtelte untracked Datei und Löschung. Es handelt sich um portables Polling, keinen Betriebssystem-Eventwatcher. Große Repositories werden im Hintergrund gescannt; der aktuelle Refresh-Pfad wird anschließend im UI-Thread ausgeführt.
+
+### Gezielte Remotes, Tracking, Tags und Force-with-lease
+
+Luna-Paket `remote_workflows`: Remotes bietet Branch-/Remote-Auswahl, Upstream-Konfiguration und Tag-Push. Pushes verwenden eine aufgelöste vollständige Quell-OID und `--no-follow-tags`, damit persönliche Git-Konfiguration keine weiteren Tags ergänzt. Force-with-lease zeigt explizite Quell-/Zielreferenz und die beobachtete OID des exakt gewählten Remote-Tracking-Branches. Die Bestätigung bindet Repository, symbolischen HEAD/OID, Remote-URLs und sämtliche Ziele; Änderungen verwerfen sie. Git prüft die erwartete OID nochmals serverseitig.
+
+Automatisches Fetch ist standardmäßig aus, wird pro Repository gespeichert und läuft nur für das aktuell geöffnete Repository nach dem gewählten Intervall. Prune ist separat wählbar. Abnahme: Zwei Tests prüfen die Produktions-Argumentbuilder und echte Tracking-/Tag-/Lease-Abläufe gegen ein lokales Bare-Remote; ein inzwischen geänderter Remote-Branch lehnt die veraltete Lease ab. Kein Test kontaktiert einen Hosting-Dienst.
