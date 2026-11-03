@@ -34,14 +34,14 @@ Abgleich mit dem vorhandenen grit-Code: `src/main.rs`, `src/ui.rs`, `src/tests.r
 | Lokale Repositories öffnen, initialisieren, klonen | Vorhanden | Weiterverwenden; Fehler müssen sichtbar bleiben |
 | Mehrere Repositories, Tabs, zuletzt verwendet | Vorhanden | Tabs und aktuelles Repo sind gespeichert |
 | Repository über `.git` öffnen | Über libgit2 möglich | Worktree- und Bare-Fälle gesondert testen |
-| Repository-Chooser und neue Fenster | Teilweise | Menü mit Recent-Liste vorhanden; Mehrfenster offen |
+| Repository-Chooser und neue Fenster | Teilweise | Recent-Liste vorhanden; Runde 3: neues Fenster mit eigenem Repositoryprozess |
 | Diff- und History-Bereich maximieren | Fehlt | `Ctrl/Cmd+M`, temporärer Fokusmodus |
 | Baum-/Listen-/Doppelbaum-Dateiansicht | Staging-Doppelliste vorhanden | Echte Verzeichnisbäume für Files, Commit und Changes in Runde 2 integriert |
 | Log mit Operationen und Fehlern | Nur aktuelle Statusmeldung | Begrenzte Sitzungshistorie mit vollständiger Ausgabe ergänzen |
 | Dateisystemänderungen automatisch erkennen | Fehlt | Runde 3: Hintergrund-Polling alle 2 s für Arbeitsbaum/Index/Referenzen; pausierbar |
 | Terminal und Dateimanager öffnen | Fehlt | Plattformabhängige explizite Benutzeraktionen; keine Shell-Interpolation |
 | Sprache, Fonts, Theme, Hotkeys konfigurierbar | Dunkles Theme, wenige Shortcuts | Runde 3: System/Dark/Light, Textgröße, Fonts, eigene Datei und vier konfigurierbare globale Shortcuts; Übersetzung teilweise |
-| Single-instance, Auto-Update, Plugins | Fehlt | Eigene Infrastruktur, nach Kernparität |
+| Single-instance, Auto-Update, Plugins | Fehlt | Runde 3: Unix-Single-Instance-Weiterleitung und explizite neue Fenster; Updater/Plugins offen |
 
 ### Verlauf, Referenzen und Suche
 
@@ -307,3 +307,11 @@ Abnahme: Drei Tests prüfen Persistenz und fehlerhafte Präferenzen, Shortcutkon
 ### AppImage-Regel
 
 Seit der Benutzeranweisung vom 3. November wird nach jeweils vier weiteren Commits ein neues, nach Commit benanntes AppImage gebaut. Prüfung: frisches AppDir, Vergleich der extrahierten ELF-Build-ID mit dem Releasebinary und direkter Start des tatsächlichen AppImages. Nach der Paketprüfung geht die Featurearbeit weiter. Die Regel ist keine Erledigt-Markierung für noch offene Features.
+
+### Neue Fenster und Single Instance
+
+Luna-Paket `window_features`: „Open in new window“ startet einen eigenständigen Repositoryprozess. In einem AppImage wird die AppImage-Datei gestartet, statt ein Executable aus einem später entfernten Mount wiederzuverwenden. `--new-window` umgeht die Unix-Single-Instance-Weiterleitung ausdrücklich; die CLI verarbeitet Repositorypfade nach diesem Schalter korrekt und behält den Rebase-Sequence-Editor-Sondermodus bei.
+
+Normale weitere Starts übergeben Öffnen/Fokus an die vorhandene Unix-Instanz. Ein privates, eigentümergebundenes 0700-Verzeichnis, Dateilock, restriktiver Socket und begrenztes Binärprotokoll schützen Bindung/Weiterleitung/Stale-Cleanup. Während einer Git-Operation warten Öffnungsanfragen in der Queue. Unverfügbarkeit wird sichtbar gemeldet; nicht-Unix-Systeme laufen ohne Weiterleitungsgarantie weiter.
+
+Abnahme: Drei Tests prüfen Argumente/Pfadgrenzen, AppImage-vs-Entwicklungs-Executable und echte lokale IPC einschließlich fehlerhafter Nachrichten und Cleanup. Der Socket-Test wurde wegen Sandbox-EPERM außerhalb der Socket-Sandbox ausgeführt. Gesamtstand nach Hosting-/Window-Integration: 105 Tests grün; Clippy erfolgreich.

@@ -72,6 +72,8 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    window_tools: window_features::WindowTools,
+    instance_handle: Option<window_features::InstanceHandle>,
     file_actions: file_action_features::FileActions,
     settings: settings_features::AppSettings,
     show_settings: bool,
@@ -1163,9 +1165,13 @@ impl GritApp {
         });
     }
     fn sidebar(&mut self, ui: &mut egui::Ui) {
-        let tr = |key| settings_features::translate(self.settings.language, key);
+        let language = self.settings.language;
+        let tr = |key| settings_features::translate(language, key);
         if ui.button(tr("settings")).clicked() {
             self.show_settings = true;
+        }
+        if ui.button("Open in new window").clicked() {
+            self.open_new_window(self.path.clone());
         }
         ui.add_space(8.);
         ui.label(RichText::new("REPOSITORY").small().strong().color(muted()));
@@ -3053,6 +3059,21 @@ impl eframe::App for GritApp {
             !ctx.style().visuals.dark_mode,
             std::sync::atomic::Ordering::Relaxed,
         );
+        if self.operation.is_none() {
+            let request = self
+                .instance_handle
+                .as_ref()
+                .and_then(|handle| handle.try_recv());
+            if let Some(request) = request {
+                if let window_features::InstanceMessage::Open(path) = request {
+                    self.open(path);
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
+        }
+        if self.instance_handle.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
         let finished = self
             .operation
             .as_ref()
@@ -3307,11 +3328,13 @@ mod tests;
 mod tree_features;
 mod ui;
 mod watcher_features;
+mod window_features;
 mod worktree_features;
 
 fn main() -> eframe::Result<()> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() == Some(std::ffi::OsStr::new("--sequence-editor")) {
+    let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("--sequence-editor")) {
         let Some(todo_path) = args.next() else {
             eprintln!("Git did not provide a rebase todo file");
             std::process::exit(1);
@@ -3326,6 +3349,18 @@ fn main() -> eframe::Result<()> {
         }
         return Ok(());
     }
+    let bypass = first.as_deref() == Some(std::ffi::OsStr::new("--new-window"));
+    let cli_path = if bypass { args.next() } else { first }.map(PathBuf::from);
+    let (instance_handle, instance_error) =
+        match window_features::instance_startup(cli_path.clone(), bypass) {
+            window_features::InstanceStartup::Primary(handle) => {
+                let note = handle.platform_note().map(str::to_owned);
+                (Some(handle), note)
+            }
+            window_features::InstanceStartup::Forwarded => return Ok(()),
+            window_features::InstanceStartup::Bypassed => (None, None),
+            window_features::InstanceStartup::Unavailable(error) => (None, Some(error)),
+        };
     let opts = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1320., 860.])
@@ -3336,10 +3371,11 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "grit",
         opts,
-        Box::new(|context| {
+        Box::new(move |context| {
             ui::configure_style(&context.egui_ctx);
             let mut app = GritApp {
                 tab: 1,
+                instance_handle,
                 ..Default::default()
             };
             let mut active_path = None;
@@ -3448,14 +3484,16 @@ fn main() -> eframe::Result<()> {
                 app.commit_options.template_name = name.clone();
                 app.commit_options.template = value.clone();
             }
-            if let Some(path) = std::env::args_os()
-                .nth(1)
-                .map(PathBuf::from)
+            if let Some(path) = cli_path
                 .or(active_path)
                 .or_else(|| app.open_repos.last().cloned())
                 .or_else(|| app.recent_repos.first().cloned())
             {
                 app.open(path);
+            }
+            if let Some(error) = instance_error {
+                app.window_tools.error = Some(error.clone());
+                app.notice = error;
             }
             Ok(Box::new(app))
         }),
