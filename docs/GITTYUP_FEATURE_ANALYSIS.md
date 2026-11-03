@@ -125,7 +125,7 @@ Quelle: `RemoteDialog.cpp`, `ConfigDialog.cpp`, `UpdateSubmodulesDialog.cpp`, `R
 | Push force-with-lease / Tags | Fehlt | Runde 3: bestätigte Tags und Force-with-lease mit gepinnter Quelle/Ziel/Erwartungs-OID |
 | Git-Credential-Helper und SSH-Agent | System-Git vorhanden | Kein eigener unsicherer Passwortspeicher |
 | Hosting-Konten: GitHub/GitLab/Gitea/Bitbucket/Beanstalk | Fehlt | GittyUp besitzt konkrete Adapter; API-Featureparität offen |
-| Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Authentifizierung, Accountbindung und Browser/API-Integration erforderlich |
+| Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Runde 3: geprüfte Browser-Workflows für PR/MR/Code-Review; native Accounts/API weiterhin offen |
 | Submodule ansehen, initialisieren, aktualisieren, öffnen | Fehlt | Luna-Repositorypaket; rekursive Updates explizit |
 | Git LFS initialisieren, Tracking, Locks, Settings | Fehlt | Eigenes Paket; `git-lfs` muss vorhanden sein; nicht als allgemeine Git-Funktion vortäuschen |
 | Worktrees und Bare-Repositories | libgit2 zum Teil vorhanden | Runde 3: Worktree-Verwaltung mit Create/Open/Remove/Prune; Bare-History geprüft |
@@ -315,3 +315,11 @@ Luna-Paket `window_features`: „Open in new window“ startet einen eigenständ
 Normale weitere Starts übergeben Öffnen/Fokus an die vorhandene Unix-Instanz. Ein privates, eigentümergebundenes 0700-Verzeichnis, Dateilock, restriktiver Socket und begrenztes Binärprotokoll schützen Bindung/Weiterleitung/Stale-Cleanup. Während einer Git-Operation warten Öffnungsanfragen in der Queue. Unverfügbarkeit wird sichtbar gemeldet; nicht-Unix-Systeme laufen ohne Weiterleitungsgarantie weiter.
 
 Abnahme: Drei Tests prüfen Argumente/Pfadgrenzen, AppImage-vs-Entwicklungs-Executable und echte lokale IPC einschließlich fehlerhafter Nachrichten und Cleanup. Der Socket-Test wurde wegen Sandbox-EPERM außerhalb der Socket-Sandbox ausgeführt. Gesamtstand nach Hosting-/Window-Integration: 105 Tests grün; Clippy erfolgreich.
+
+### Hosting- und Browser-Code-Review-Workflows (Teilfeature)
+
+Luna-Paket `hosting_features`: Integrations erkennt HTTPS-/SSH-/SCP-Remotes für GitHub, GitLab, Gitea, Bitbucket Cloud und Beanstalk. Explizite Aktionen öffnen Repository, getrackten Branch, ausgewählten Commit und eine vorausgefüllte Vergleichs-/PR-/MR- bzw. Review-Seite. Branchlinks verwenden das tatsächliche Upstream-Remote, Compare respektiert Ziel-/Quellrepository. Custom Hosts unterstützen geprüfte relative Routen. Konfiguration wird pro Repository gespeichert; Credentialanteile, nicht-HTTP(S)-Webadressen und Query-/Fragmentinhalte in eigenen Repository-URLs sind ausgeschlossen.
+
+Dies nutzt die Browseranmeldung und ist ausdrücklich keine native Kontenverwaltung, PR-API-Liste oder API-Erstellung. Diese Teile bleiben offen. Fünf Tests prüfen providerbezogene Links, Sonderzeichen/Forks, SSH-Ports, ungültige Schemes und Credentialredaktion; keine privaten Konten oder Netzwerkaktionen wurden benutzt.
+
+Verifizierte Primärquellen für die Browserworkflows: [GitHub PR Query-Parameter](https://docs.github.com/en/pull-requests/reference/using-query-parameters-to-create-a-pull-request), [GitLab Merge-Workflow](https://docs.gitlab.com/topics/git/merge/), [Bitbucket PR-Links](https://support.atlassian.com/bitbucket-cloud/kb/terminal-not-showing-create-pull-request-for-branch-http-link-to-bitbucket-repo/), [Beanstalk Branch-Reviews](https://support.beanstalkapp.com/article/65-how-do-i-request-a-code-review-for-a-branch), [Gitea PR-API-Dokumentation](https://docs.gitea.com/api/operations/repo-create-pull-request/) als Referenz zum separat offenen API-Ausbau.

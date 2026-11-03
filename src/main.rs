@@ -72,6 +72,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    hosting: hosting_features::HostingTools,
     window_tools: window_features::WindowTools,
     instance_handle: Option<window_features::InstanceHandle>,
     file_actions: file_action_features::FileActions,
@@ -2972,6 +2973,10 @@ impl eframe::App for GritApp {
         for path in self.open_repos.iter().chain(&self.recent_repos) {
             let key = history_features::repo_storage_key(path);
             storage.set_string(
+                &format!("hosting_preferences:{key}"),
+                history_features::encode_records(&self.hosting.persistence_strings(&key)),
+            );
+            storage.set_string(
                 &format!("remote_preferences:{key}"),
                 history_features::encode_records(&self.remote_tools.persistence_strings(&key)),
             );
@@ -3314,6 +3319,7 @@ mod external_diff_features;
 mod file_action_features;
 mod file_features;
 mod history_features;
+mod hosting_features;
 mod integration_features;
 mod metadata_features;
 mod preview_features;
@@ -3459,6 +3465,11 @@ fn main() -> eframe::Result<()> {
                 }
                 for path in app.open_repos.iter().chain(&app.recent_repos) {
                     let key = history_features::repo_storage_key(path);
+                    if let Some(saved) = storage.get_string(&format!("hosting_preferences:{key}"))
+                        && let Ok(values) = history_features::decode_records(&saved)
+                    {
+                        app.hosting.load_persistence_strings(&key, &values);
+                    }
                     if let Some(saved) = storage.get_string(&format!("remote_preferences:{key}"))
                         && let Ok(values) = history_features::decode_records(&saved)
                     {
