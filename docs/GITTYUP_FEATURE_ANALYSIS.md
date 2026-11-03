@@ -88,7 +88,7 @@ Quelle: `DiffView/HunkWidget.cpp`, `DiffView/Images.cpp`, `FileContextMenu.cpp`,
 | Große Diffs erst nach Nachfrage laden | Fehlt | Größen-/Zeilenlimit und explizites »Load« ergänzen |
 | Dateiversion exportieren/mit Anwendung öffnen | Fehlt | Luna-Dateiversionspaket, bytegetreuer Export, Überschreibbestätigung |
 | Dateipfad kopieren, Dateiverlauf filtern, Executable-Bit ändern | Fehlt | Kontextmenüs schrittweise erweitern |
-| Externer Editor/Diff/Merge | Fehlt | Konfigurierbare argv-Werkzeuge mit lokalem Prozessstart; kein Shelltext |
+| Externer Editor/Diff/Merge | Fehlt | Runde 3: Editor, externe Diff-/Merge-Werkzeuge mit argv-Vorlagen und temporären Dateiversionen |
 
 ### Commits, Branches und Konflikte
 
@@ -253,3 +253,9 @@ Automatisches Fetch ist standardmäßig aus, wird pro Repository gespeichert und
 Luna-Paket `stash_features`: Repository Tools → Stash options bietet Namen, explizites Include untracked, Keep index oder Staged only (Git ≥ 2.35). Ungültige Kombinationen sind gesperrt; Folgen werden vor dem Erstellen angezeigt. Apply/Pop kann den Indexzustand optional wiederherstellen. Die Auswahl ist an Repository und Stash-OID gebunden; ein verschobenes `stash@{n}` wird abgelehnt. Drop hat eine eigene OID-gebundene Bestätigung. Der Sidebar-Einstieg führt zu den gemeinsamen Werkzeugen.
 
 Abnahme: Sieben Tests prüfen echte Stashes mit Sonderzeichen im Namen, untracked Standard/Opt-in, Keep index, Staged only, Index-Restore und OID-Änderungen. Git kann überlappende ungestagte Änderungen bei Staged only ablehnen; die UI nennt diese Grenze und zeigt Git-Fehler unverändert an.
+
+### Externe Diff- und Merge-Werkzeuge
+
+Luna-Paket `external_diff_features`: Integrations speichert ausführbares Programm und Argumentvorlagen (ein Argument pro Zeile). Diff ersetzt `{old}`/`{new}` durch absolute temporäre Dateipfade; Working/Index/HEAD und historische erste-Parent-Versionen sind getrennte Quellen. Merge stellt `{base}`, `{ours}`, `{theirs}` aus den unaufgelösten Indexstufen und `{merged}` als geprüfte Arbeitsdatei bereit. Fehlende Konfliktseiten sind leere Dateien. Snapshots sind schreibgeschützt, bleiben bis zum Prozessende erhalten und werden danach entfernt. Der Merge-Ausgang wird nicht automatisch gestagt.
+
+Abnahme: Vier Tests starten ein eigenes Prüfprogramm mit Leerzeichen-Pfaden, prüfen tatsächliche Inhalte für alle Diffquellen und Cleanup. Ein echter Konflikt prüft drei Stufen und die geschriebene Arbeitsdatei, während der Index unaufgelöst bleibt. Traversal, Symlinks und ungültige Platzhalter werden abgewiesen; kein Shell-Parsing der Vorlagen.

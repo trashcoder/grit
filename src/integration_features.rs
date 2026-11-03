@@ -251,6 +251,7 @@ fn editor_arguments(root: &Path, relative: &str) -> Result<Vec<OsString>, String
 impl GritApp {
     pub(super) fn integrations_view(&mut self, ui: &mut egui::Ui) {
         ui.heading("Integrations");
+        self.external_diff_tools_ui(ui);
         let Some(root) = self.path.clone() else {
             ui.label("Open a repository to use integrations.");
             return;

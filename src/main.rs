@@ -47,6 +47,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    external_diff: external_diff_features::ExternalDiffTools,
     stash_tools: stash_features::StashTools,
     remote_tools: remote_features::RemoteTools,
     watcher: watcher_features::RepositoryWatcher,
@@ -2875,6 +2876,9 @@ impl eframe::App for GritApp {
         }
         storage.set_string("file_tree_mode", self.tree_mode.to_string());
         storage.set_string("external_editor", self.integrations.editor_program.clone());
+        storage.set_string("external_diff_program", self.external_diff.program.clone());
+        storage.set_string("external_diff_args", self.external_diff.diff_args.clone());
+        storage.set_string("external_merge_args", self.external_diff.merge_args.clone());
         storage.set_string("commit_template", self.commit_options.template.clone());
         storage.set_string(
             "commit_template_name",
@@ -3142,6 +3146,7 @@ mod blame_features;
 mod commit_features;
 mod diff_features;
 mod diff_preferences;
+mod external_diff_features;
 mod file_features;
 mod history_features;
 mod integration_features;
@@ -3223,6 +3228,14 @@ fn main() -> eframe::Result<()> {
                     storage.get_string("commit_author_name").unwrap_or_default();
                 app.commit_options.author_email = storage
                     .get_string("commit_author_email")
+                    .unwrap_or_default();
+                app.external_diff.program = storage
+                    .get_string("external_diff_program")
+                    .unwrap_or_default();
+                app.external_diff.diff_args =
+                    storage.get_string("external_diff_args").unwrap_or_default();
+                app.external_diff.merge_args = storage
+                    .get_string("external_merge_args")
                     .unwrap_or_default();
                 app.tree_mode = storage.get_string("file_tree_mode").as_deref() == Some("true");
                 app.diff_preferences.context_lines = storage
