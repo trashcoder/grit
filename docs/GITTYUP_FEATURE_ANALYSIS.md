@@ -41,7 +41,9 @@ Abgleich mit dem vorhandenen grit-Code: `src/main.rs`, `src/ui.rs`, `src/tests.r
 | Dateisystemänderungen automatisch erkennen | Fehlt | Runde 3: Hintergrund-Polling alle 2 s für Arbeitsbaum/Index/Referenzen; pausierbar |
 | Terminal und Dateimanager öffnen | Fehlt | Plattformabhängige explizite Benutzeraktionen; keine Shell-Interpolation |
 | Sprache, Fonts, Theme, Hotkeys konfigurierbar | Dunkles Theme, wenige Shortcuts | Runde 3: System/Dark/Light, Textgröße, Fonts, eigene Datei und vier konfigurierbare globale Shortcuts; Übersetzung teilweise |
-| Single-instance, Auto-Update, Plugins | Fehlt | Runde 3: Unix-Single-Instance-Weiterleitung und explizite neue Fenster; Updater/Plugins offen |
+| Single-instance und neue Fenster | Fehlt | Runde 3: Unix-Weiterleitung und explizite neue Fenster |
+| Auto-Update | Fehlt | Auf ausdrücklichen Benutzerwunsch vom 4. November auf später verschoben |
+| Plugins | Fehlt | Auf ausdrücklichen Benutzerwunsch vom 4. November ausgenommen; wird nicht portiert |
 
 ### Verlauf, Referenzen und Suche
 
@@ -124,8 +126,8 @@ Quelle: `RemoteDialog.cpp`, `ConfigDialog.cpp`, `UpdateSubmodulesDialog.cpp`, `R
 | Automatisches Fetch und Prune-Option | Prune bei manuellem Fetch | Runde 3: pro Repository gespeichertes Opt-in mit Intervall und Prune |
 | Push force-with-lease / Tags | Fehlt | Runde 3: bestätigte Tags und Force-with-lease mit gepinnter Quelle/Ziel/Erwartungs-OID |
 | Git-Credential-Helper und SSH-Agent | System-Git vorhanden | Kein eigener unsicherer Passwortspeicher |
-| Hosting-Konten: GitHub/GitLab/Gitea/Bitbucket/Beanstalk | Fehlt | GittyUp besitzt konkrete Adapter; API-Featureparität offen |
-| Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Runde 3: geprüfte Browser-Workflows für PR/MR/Code-Review; native Accounts/API weiterhin offen |
+| Hosting-Konten: GitHub/GitLab/Gitea/Bitbucket/Beanstalk | Fehlt | Runde 4: mehrere Konten, Repositorylisten, lokale Zuordnung und Review-APIs für die fünf benannten Anbieter |
+| Pull-Request-Dialog und Hosting-Aktionen | Fehlt | Browser-Workflows Runde 3; Runde 4: native Liste/Details/bestätigte Erstellung von PR/MR/Reviews |
 | Submodule ansehen, initialisieren, aktualisieren, öffnen | Fehlt | Luna-Repositorypaket; rekursive Updates explizit |
 | Git LFS initialisieren, Tracking, Locks, Settings | Fehlt | Eigenes Paket; `git-lfs` muss vorhanden sein; nicht als allgemeine Git-Funktion vortäuschen |
 | Worktrees und Bare-Repositories | libgit2 zum Teil vorhanden | Runde 3: Worktree-Verwaltung mit Create/Open/Remove/Prune; Bare-History geprüft |
@@ -357,3 +359,21 @@ Abnahme: Sechs gezielte Tests prüfen echte Autoren-/Revisionen-/Arbeitskopiezuo
 Version tags übernimmt vorhandene Tags als Vorlage: Name mit fortlaufender Endnummer wird erhöht vorgeschlagen, Tagart und Nachricht bleiben als editierbare Vorlage erhalten. Leichte und annotierte neue Tags zeigen vor Bestätigung die aufgelöste Commit-OID. Beim Ersetzen eines vorhandenen lokalen Tags sind alte Objekt-OID und neues Ziel sichtbar; es ist eine zusätzliche Ersetzungsbestätigung nötig. Referenzänderungen verwenden atomaren Compare-and-swap, sodass ein zwischenzeitlich geändertes Tag nicht überschrieben wird. Auch der bestehende Löschdialog bindet sich jetzt an die konkrete Tag-OID und verwendet einen erwarteten alten Wert.
 
 Abnahme: Zwei Tests prüfen Vorschlagsnamen (Unicode, Nummernbreite, Überlauf), echte annotierte/leichte Tags, konkurrierende Ersetzung und Löschung sowie veränderte HEAD-Ziele. Index und Arbeitsdatei bleiben bytegleich. Der Ersatz eines Remote-Tags gehört nicht zu dieser lokalen Operation und bleibt ein gesonderter offener Schritt.
+
+### Native Hosting-Konten, Repository-Zuordnung und Review-APIs
+
+Luna-Paket `hosting_api` mit Oberflächenintegration durch den Hauptagenten: Die eigene Ansicht „Hosting accounts“ verwaltet mehrere GitHub-/GitLab-/Gitea-/Bitbucket-Cloud-/Beanstalk-Konten. Metadaten und Zuordnungen von Remote-Repositories zu vorhandenen lokalen Kopien werden pro Konto gespeichert; Tokens bleiben ausschließlich im Sitzungsspeicher. Konten-/Repositorywechsel verwerfen alte Ergebnisse und Bestätigungen. Konten und Repositoryauswahl sind während Anfragen gesperrt.
+
+Repositorylisten besitzen Filter und weitere Seiten; Auswahl übernimmt das korrekte Namespace/Repository (auch verschachtelte GitLab-Gruppen und ownerlose Beanstalk-IDs). Lokale Kopien werden kanonisiert und mit System-Git validiert; Öffnen und Klonen führen in die vorhandenen grit-Abläufe. Beim Klonen bleiben Zielordner und Ausführung eine explizite Entscheidung im Clone-Dialog. HTTPS-/SSH-/SCP-URLs werden geprüft, Git erhält einen ausdrücklichen Optionsabschluss. Die UI-Felder sind kontrastiert und bei 980 × 680 geprüft. Bei der Prüfung wurde außerdem sichergestellt, dass ein rechtsgeklickter Dateipfad vor dem gemeinsamen Dateikontextmenü ausgewählt wird.
+
+Reviewlisten, Details und bestätigte Erstellung verwenden native HTTPS-API-Anfragen. GitHub erhält Bearer-Auth, GitLab PRIVATE-TOKEN, Gitea Token-Auth und Bitbucket/Beanstalk Basic-Auth; Geheimnisse und JSON-Requestbodies gelangen über stdin an curl und nicht in argv/Logs. Antworten sind auf 2 MiB begrenzt, Laufzeit und Fehlerausgaben begrenzt. Der Transport benötigt curl auf PATH. Ein Konto-/Repositorywechsel macht eine alte Create-Bestätigung ungültig. Beanstalks abweichende Branchrichtung wird korrekt abgebildet; der Titel wird als erste Beschreibungszeile erhalten.
+
+Abnahme: 14 gezielte Tests prüfen Adapterpfade/-payloads/-Auth, GitHub Public/Enterprise, GitLab-Namespace-Encoding, Beanstalk und Bitbucket-Statusparameter, Konten-/Tokenisolation, lokale Mappings, Clone-Handoff sowie stale Ergebnisse. Zwei davon verwenden ausschließlich lokale HTTP-Mocks; keine echten Konten/Reviews wurden angesprochen oder erzeugt. Gesamtstand: **126 Tests grün**, Clippy mit `-D warnings` erfolgreich; native UI bei Mindestgröße geprüft.
+
+Primärquellen: [GitHub Pull Requests](https://docs.github.com/en/rest/pulls/pulls), [GitLab Merge Requests](https://docs.gitlab.com/api/merge_requests/), [Gitea Pull Requests](https://docs.gitea.com/api/operations/repo-create-pull-request/), [Bitbucket Pull Requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/), [Beanstalk Code Reviews](https://api.beanstalkapp.com/code_review).
+
+### Erneute Pause nach Hosting-Commit
+
+Auf die neue Benutzeranweisung wird nach diesem Commit ein aktuelles AppImage erzeugt und anschließend pausiert, unabhängig vom sonstigen Vier-Commit-Rhythmus. Plugins sind ausgenommen, der Updater ist zurückgestellt. Die noch offene SHA-256-Integration ist nicht Teil des Pakets: Der unvollständige CLI-Backend-Entwurf liegt unter `target/paused-work/cli_repository.rs.wip`; drei isolierte Harness-Tests ersetzen keine App-Integration. Die LFS-Referenzprüfung nennt zusätzlich offene lokale Einstellungen: `lfs.url`, `lfs.pruneoffsetdays`, `lfs.fetchrecentalways`, `lfs.fetchrecentrefsdays`, `lfs.fetchrecentcommitsdays`, LFS-Umgebungsanzeige und bestätigte Deinitialisierung. Dazu wurde keine Implementierung eingebunden. Ebenfalls weiter offen: vollständige Übersetzung, Remote-Tag-Ersatz und weitere Einzelgrenzen aus der Matrix.
+
+Die abschließende Gesamtabnahme fand einen nicht deterministischen Blame-Fehlerpfad: Beendet Git sich vor dem Lesen von stdin, konnte ein Broken-Pipe-Fehler die eigentliche Git-Fehlermeldung verdecken. Der Worker sammelt Status und stderr jetzt auch in diesem Fall vollständig ein und hält das strukturierte Git-Protokoll mit C-Locale stabil. Die Korrektur wird im selben Integrationscommit aufgenommen.

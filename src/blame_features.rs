@@ -173,7 +173,7 @@ fn git_blame_moved_copied(
     historical: bool,
 ) -> Result<Vec<TrackedBlameLine>, String> {
     let mut command = Command::new("git");
-    command.current_dir(root).args([
+    command.env("LC_ALL", "C").current_dir(root).args([
         "-c",
         "core.quotePath=false",
         "blame",
@@ -208,20 +208,20 @@ fn git_blame_moved_copied(
         .ok_or("Could not read Git blame errors")?;
     let stdout_reader = std::thread::spawn(move || read_capped(stdout, MAX_BLAME_OUTPUT_BYTES));
     let stderr_reader = std::thread::spawn(move || read_capped(stderr, MAX_BLAME_ERROR_BYTES));
-    if !historical {
-        let write_result = child
+    // Git can reject the repository/revision before it consumes stdin. Keep the
+    // pipe error until after wait/stderr collection so this race does not hide
+    // the actual Git failure behind a generic broken-pipe message.
+    let write_error = if !historical {
+        child
             .stdin
             .take()
             .ok_or("Could not send working copy to Git blame")?
-            .write_all(content);
-        if let Err(error) = write_result {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_reader.join();
-            let _ = stderr_reader.join();
-            return Err(format!("Could not send working copy to Git blame: {error}"));
-        }
-    }
+            .write_all(content)
+            .err()
+    } else {
+        drop(child.stdin.take());
+        None
+    };
     let status = child
         .wait()
         .map_err(|error| format!("Could not read Git blame result: {error}"))?;
@@ -241,6 +241,9 @@ fn git_blame_moved_copied(
             "Git could not track moved/copied lines: {}",
             String::from_utf8_lossy(&stderr).trim()
         ));
+    }
+    if let Some(error) = write_error {
+        return Err(format!("Could not send working copy to Git blame: {error}"));
     }
     let parsed = parse_line_porcelain(&stdout)?;
     let expected_lines = checked_text(content)?.lines().count();

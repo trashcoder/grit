@@ -59,7 +59,7 @@ For development, install Rust and Git, then run:
 cargo run --release
 ```
 
-On Linux, install the native windowing system development libraries required by eframe (X11/Wayland and OpenGL). Cargo can build the application on Windows, Linux, and macOS. The packaged app also requires Git to be installed and available on `PATH` for repository operations.
+On Linux, install the native windowing system development libraries required by eframe (X11/Wayland and OpenGL). Cargo can build the application on Windows, Linux, and macOS. The packaged app also requires Git to be installed and available on `PATH` for repository operations. Native hosting API actions additionally use `curl` on `PATH` for HTTPS transport.
 
 ### Linux AppImage
 
@@ -81,3 +81,5 @@ The GitHub Actions workflow builds on Windows, Linux, Apple Silicon macOS, and I
 ## Current scope
 
 Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive rebase plans require a clean working tree and currently exclude merge commits.
+
+**Hosting accounts** manages GitHub, GitLab, Gitea, Bitbucket Cloud and Beanstalk accounts, repository lists and local-copy mappings. Tokens stay in memory; only account metadata and local paths are saved. Repository and review pages load on explicit actions. Review creation requires confirmation; selecting a clone URL opens the normal clone dialog so the destination remains an explicit choice.

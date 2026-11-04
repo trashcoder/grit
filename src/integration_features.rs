@@ -249,6 +249,30 @@ fn editor_arguments(root: &Path, relative: &str) -> Result<Vec<OsString>, String
 }
 
 impl GritApp {
+    pub(super) fn hosting_accounts_view(&mut self, ui: &mut egui::Ui) {
+        ui.scope(|ui| {
+            let visuals = ui.visuals_mut();
+            visuals.extreme_bg_color = if visuals.dark_mode {
+                panel2()
+            } else {
+                Color32::WHITE
+            };
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1., border());
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1., blue());
+            self.hosting_api.hosting_api_ui(ui);
+        });
+        if self.operation.is_none() {
+            if let Some(path) = self.hosting_api.take_open_request() {
+                self.open(path);
+                return;
+            }
+            if let Some((url, _name)) = self.hosting_api.take_clone_request() {
+                self.clone_url = url;
+                self.clone_path.clear();
+                self.show_clone = true;
+            }
+        }
+    }
     pub(super) fn integrations_view(&mut self, ui: &mut egui::Ui) {
         ui.heading("Integrations");
         self.external_diff_tools_ui(ui);

@@ -72,6 +72,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    hosting_api: hosting_api_features::HostingApiTools,
     version_tags: tag_features::VersionTagTools,
     hosting: hosting_features::HostingTools,
     window_tools: window_features::WindowTools,
@@ -461,7 +462,7 @@ impl GritApp {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let result = Command::new("git")
-                .args(["clone", &url])
+                .args(["clone", "--", &url])
                 .arg(&dest_path)
                 .output()
                 .map_err(|e| e.to_string())
@@ -1246,6 +1247,17 @@ impl GritApp {
         {
             self.tab = 8;
         }
+        if ui
+            .add_sized(
+                [ui.available_width(), 26.],
+                egui::Button::new("Hosting accounts")
+                    .selected(self.tab == 10)
+                    .frame(false),
+            )
+            .clicked()
+        {
+            self.tab = 10;
+        }
         ui.add_space(14.);
         if ui
             .selectable_label(self.tab == 9, "Code & diff search")
@@ -1348,6 +1360,7 @@ impl GritApp {
                     4 => "Blame",
                     5 => "Files",
                     6 => "Repository tools",
+                    10 => "Hosting accounts",
                     9 => "Code search",
                     7 => "File history",
                     8 => "LFS and external tools",
@@ -1423,6 +1436,11 @@ impl GritApp {
             5 => self.files_view(ui),
             6 => {
                 egui::ScrollArea::both().show(ui, |ui| self.repository_tools_view(ui));
+            }
+            10 => {
+                egui::ScrollArea::vertical()
+                    .id_salt("hosting_accounts_content")
+                    .show(ui, |ui| self.hosting_accounts_view(ui));
             }
             9 => self.code_search_ui(ui),
             7 => self.file_history_view(ui),
@@ -2489,7 +2507,7 @@ impl GritApp {
                                     .frame(false)
                                     .truncate(),
                             );
-                            if response.clicked() {
+                            if response.clicked() || response.secondary_clicked() {
                                 self.preview_file(path);
                             }
                             response.on_hover_text(path).context_menu(|ui| {
@@ -2991,6 +3009,10 @@ impl eframe::App for GritApp {
             "blame_preferences",
             history_features::encode_records(&self.blame_state.persistence_strings()),
         );
+        storage.set_string(
+            "hosting_api_accounts",
+            history_features::encode_records(&self.hosting_api.persistence_strings()),
+        );
         storage.set_string("file_tree_mode", self.tree_mode.to_string());
         storage.set_string("external_editor", self.integrations.editor_program.clone());
         storage.set_string("external_diff_program", self.external_diff.program.clone());
@@ -3329,6 +3351,7 @@ mod external_diff_features;
 mod file_action_features;
 mod file_features;
 mod history_features;
+mod hosting_api_features;
 mod hosting_features;
 mod integration_features;
 mod metadata_features;
@@ -3397,6 +3420,11 @@ fn main() -> eframe::Result<()> {
             };
             let mut active_path = None;
             if let Some(storage) = context.storage {
+                if let Some(saved) = storage.get_string("hosting_api_accounts")
+                    && let Ok(values) = history_features::decode_records(&saved)
+                {
+                    app.hosting_api.load_persistence_strings(&values);
+                }
                 if let Some(saved) = storage.get_string("blame_preferences")
                     && let Ok(values) = history_features::decode_records(&saved)
                 {
