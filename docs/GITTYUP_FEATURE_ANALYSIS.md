@@ -1,6 +1,6 @@
 # GittyUp → grit: Funktionsanalyse und Implementierungsplan
 
-Stand: 3. November 2026. Ziel: native Rust-Implementierung mit egui und libgit2; vertraute GittyUp-Arbeitsabläufe. Dies ist eine überprüfbare Bestandsaufnahme, keine Behauptung vollständiger Funktionsgleichheit.
+Stand: 4. November 2026. Ziel: native Rust-Implementierung mit egui und libgit2; vertraute GittyUp-Arbeitsabläufe. Dies ist eine überprüfbare Bestandsaufnahme, keine Behauptung vollständiger Funktionsgleichheit.
 
 ## Referenz und Methode
 
@@ -65,7 +65,7 @@ Quelle: `CommitList.cpp`, `CommitToolBar.cpp`, `AdvancedSearchWidget.cpp`, `Hist
 | Suchvorschläge, Query-Sprache mit Gruppierung | Fehlt | Runde 3: eigene AND/OR/NOT-Klammergrammatik, Quotes und Feldvorschläge |
 | Commit komplett lesen, Autor und Committer unterscheiden | Nur Summary und Autor | Vollständige Message/E-Mail/Committer/Eltern ergänzen |
 | Dateiversionen/Dateiverlauf und vorherige/nächste Revision | Nur aktueller Text/Blame | Luna-Dateiversionspaket |
-| Blame mit integrierter Timeline | Nur `git blame`-Text | Interaktive Attribution/Commitliste in Runde 2; Heatmap bleibt offen |
+| Blame mit integrierter Timeline | Nur `git blame`-Text | Attribution/Commitliste Runde 2; Runde 4: Heatmap nach Alter/Beitrag und Git-Move/Copy-Erkennung |
 
 ### Änderungen, Diff und Staging
 
@@ -187,7 +187,7 @@ Die datumsbasierten Suchgrenzen sind inklusiv und berücksichtigen den Commit-Ze
 
 ### Explizite Grenzen
 
-Textzeilen-Staging unterstützt keine Binär-, Rename/Copy- oder reinen Mode-Patches; hierfür bleibt das Staging der gesamten Datei. Leere Dateien haben keine Textzeilen zum Selektieren. Nicht darstellbare partielle EOF-Patches werden von Git mit sichtbarer Fehlermeldung abgelehnt. In Runde 3 wurden begrenzter lexikalischer Suchindex, Bildvorschau, externe Diff-/Merge-Werkzeuge und bestätigte Reset-/Force-with-lease-Dialoge ergänzt. Weiter offen bleiben insbesondere Hosting-Konten/API-PR-Verwaltung, vollständiger Blame-Heatmap-/Copy-Move-Ausbau, vollständige Übersetzung, native SHA-256-Unterstützung und Updater-/Plugin-Infrastruktur. Browser-Hostingworkflows werden getrennt von Konten-/API-Funktionen bewertet.
+Textzeilen-Staging unterstützt keine Binär-, Rename/Copy- oder reinen Mode-Patches; hierfür bleibt das Staging der gesamten Datei. Leere Dateien haben keine Textzeilen zum Selektieren. Nicht darstellbare partielle EOF-Patches werden von Git mit sichtbarer Fehlermeldung abgelehnt. In Runde 3 wurden begrenzter lexikalischer Suchindex, Bildvorschau, externe Diff-/Merge-Werkzeuge und bestätigte Reset-/Force-with-lease-Dialoge ergänzt. Weiter offen bleiben insbesondere Hosting-Konten/API-PR-Verwaltung, vollständige Übersetzung, native SHA-256-Unterstützung und Updater-/Plugin-Infrastruktur. Browser-Hostingworkflows werden getrennt von Konten-/API-Funktionen bewertet.
 
 ### Commit-Regel
 
@@ -337,3 +337,17 @@ Abnahme vor der Pause: **106 Tests bestanden**, Clippy mit `-D warnings` sowie F
 ### Pausenübergabe
 
 Auf ausdrücklichen Benutzerwunsch wird nach diesem Commit pausiert. Das Gesamtziel ist nicht abgeschlossen. Hosting-Account-/PR-APIs, vollständige Übersetzung, native SHA-256-Unterstützung, Updater und Plugins bleiben offen; Einzelgrenzen stehen in der Matrix und den Abnahmen. Der unfertige Luna-Entwurf für Blame-Heatmap/Copy-Move liegt unverändert gesichert unter `target/paused-work/blame_features.rs.wip` und ist weder eingebunden noch Teil des Pakets. Beim Fortsetzen sind dort zuerst die `git blame`-Pfadübergabe, Newlines im Copy-Test und die Persistenzintegration zu korrigieren. Der letzte freigegebene Blame-Code bleibt im Quellbaum erhalten.
+
+## Fortsetzung am 4. November 2026
+
+Der Benutzer hat Plugins ausdrücklich aus dem gewünschten Umfang genommen: „die Plugins brauchst du nicht nachzubauen“. GittyUps Lua-Diffdiagnose-Plugins werden deshalb nicht portiert. Dieser Punkt ist vom Ziel ausgenommen und wird nicht als implementiert ausgewiesen. Die übrigen offenen Features, der eigene Commit pro Feature und AppImage-Builds nach jeweils vier neuen Commits gelten weiter. Der letzte geprüfte AppImage-Quellstand ist Commit `4d18fcb`; bei der Fortsetzung startet der Commitzähler dort.
+
+Der Updater wurde anschließend ebenfalls ausdrücklich auf später verschoben („updater kommt später“). Er gehört damit nicht zur laufenden Implementierungsrunde; es wird derzeit keine Update-Infrastruktur gebaut.
+
+### Blame-Heatmap und Move/Copy-Herkunft
+
+Luna-Paket `blame_completion`: Die Blame-Ansicht besitzt Heatmaps für Alter und zugerechneten Beitrag. Farben sind nach geladenen Daten, Modus und Light/Dark-Theme gecacht; virtuelle Zeilen respektieren die eingestellte Schriftgröße. Die Optionen werden gespeichert und über Repositorywechsel erhalten.
+
+„Track moved/copied lines“ verwendet tatsächlich System-Git mit `blame --line-porcelain -M -C -C -C`; die entsprechenden libgit2-Flags sind in der verwendeten Bibliothek nicht implementiert und werden daher nicht als Ersatz ausgegeben. Herkunftsdatei/-zeile bleiben erhalten, Unicodepfade erscheinen im Tooltip. Arbeitskopie und historische Revision bleiben getrennte Quellen; nicht committete Zeilen sind weiterhin ausdrücklich markiert. Die Ansicht nennt Git-Similaritätsgrenzen für kurze/geänderte Blöcke. Quelldaten sind auf 4 MiB begrenzt, Git-Ausgabe auf 128 MiB, stderr wird begrenzt gespeichert und vollständig geleert; Fehler sind sichtbar.
+
+Abnahme: Sechs gezielte Tests prüfen echte Autoren-/Revisionen-/Arbeitskopiezuordnung, Kopie mit Unicode-/Glob-Zeichen im Pfad, Rename/Move, Heatmap-Grenzfälle und Prozess-/Größenfehler. Native UI-Prüfung zeigt Blame und seine Optionen im Test-Repository. Der während der Pause gesicherte WIP ist damit durch die integrierte Implementierung ersetzt.

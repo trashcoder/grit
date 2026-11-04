@@ -231,7 +231,10 @@ impl GritApp {
         self.code_search.cancel_for_repo_change(None);
         self.selected_commit = None;
         self.display_diff_key = None;
+        let blame_preferences = self.blame_state.persistence_strings();
         self.blame_state = Default::default();
+        self.blame_state
+            .load_persistence_strings(&blame_preferences);
         self.watcher = Default::default();
         self.reset_tools = Default::default();
         self.metadata_tools = Default::default();
@@ -2982,6 +2985,10 @@ impl eframe::App for GritApp {
                 history_features::encode_records(&self.remote_tools.persistence_strings(&key)),
             );
         }
+        storage.set_string(
+            "blame_preferences",
+            history_features::encode_records(&self.blame_state.persistence_strings()),
+        );
         storage.set_string("file_tree_mode", self.tree_mode.to_string());
         storage.set_string("external_editor", self.integrations.editor_program.clone());
         storage.set_string("external_diff_program", self.external_diff.program.clone());
@@ -3387,6 +3394,11 @@ fn main() -> eframe::Result<()> {
             };
             let mut active_path = None;
             if let Some(storage) = context.storage {
+                if let Some(saved) = storage.get_string("blame_preferences")
+                    && let Ok(values) = history_features::decode_records(&saved)
+                {
+                    app.blame_state.load_persistence_strings(&values);
+                }
                 if let Some(saved) = storage.get_string("app_settings")
                     && let Ok(records) = history_features::decode_records(&saved)
                     && let Ok(settings) = settings_features::AppSettings::decode_records(&records)
