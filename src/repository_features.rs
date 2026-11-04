@@ -13,7 +13,7 @@ pub(crate) struct RepositoryTools {
     tag_name: String,
     tag_message: String,
     tag_target: String,
-    pending_tag_delete: Option<String>,
+    pending_tag_delete: Option<tag_features::TagDeletion>,
     ignore_path: String,
     ignore_raw_pattern: bool,
 }
@@ -129,6 +129,7 @@ impl GritApp {
         if let Some(error) = &self.watcher.error {
             ui.colored_label(Color32::YELLOW, error);
         }
+        self.version_tags_ui(ui);
         self.reset_tools_ui(ui);
         self.worktree_tools_ui(ui);
         egui::CollapsingHeader::new("Stash options").show(ui, |ui| self.stash_options_ui(ui));
@@ -251,14 +252,24 @@ impl GritApp {
                             .add_enabled(!busy, egui::Button::new("Delete…"))
                             .clicked()
                         {
-                            self.repo_tools.pending_tag_delete = Some(tag);
+                            match self
+                                .repo()
+                                .ok_or_else(|| "Open a repository first".to_owned())
+                                .and_then(|repo| tag_features::review_tag_deletion(&repo, &tag))
+                            {
+                                Ok(review) => self.repo_tools.pending_tag_delete = Some(review),
+                                Err(error) => self.notice = error,
+                            }
                         }
                     });
                 }
                 if let Some(tag) = self.repo_tools.pending_tag_delete.clone() {
                     ui.colored_label(
                         Color32::YELLOW,
-                        format!("Delete tag {tag}? This cannot be undone."),
+                        format!(
+                            "Delete tag {} at {}? This cannot be undone.",
+                            tag.name, tag.expected
+                        ),
                     )
                     .on_hover_text("This explicit confirmation is required before deletion.");
                     ui.horizontal(|ui| {
@@ -266,7 +277,7 @@ impl GritApp {
                             .add_enabled(!busy, egui::Button::new("Confirm delete tag"))
                             .clicked()
                         {
-                            self.git_action("Delete tag", &["tag", "-d", "--", &tag]);
+                            self.start_git_command("Delete tag", tag.arguments());
                             self.repo_tools.pending_tag_delete = None;
                         }
                         if ui.button("Cancel").clicked() {

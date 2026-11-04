@@ -72,6 +72,7 @@ struct CommitFile {
 }
 #[derive(Default)]
 struct GritApp {
+    version_tags: tag_features::VersionTagTools,
     hosting: hosting_features::HostingTools,
     window_tools: window_features::WindowTools,
     instance_handle: Option<window_features::InstanceHandle>,
@@ -227,6 +228,7 @@ impl GritApp {
         }
     }
     fn reset_repo_selection(&mut self) {
+        self.version_tags = Default::default();
         self.file_actions = Default::default();
         self.code_search.cancel_for_repo_change(None);
         self.selected_commit = None;
@@ -3337,6 +3339,7 @@ mod repository_features;
 mod reset_features;
 mod settings_features;
 mod stash_features;
+mod tag_features;
 #[cfg(test)]
 mod tests;
 mod tree_features;

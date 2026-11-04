@@ -109,7 +109,7 @@ Quelle: `CommitEditor.cpp`, `TemplateDialog.cpp`, `AmendDialog.cpp`, `MergeDialo
 | Detached Checkout / Branch an Commit | Vorhanden | Weiterverwenden |
 | Soft/Mixed/Hard Reset | Fehlt | In Runde 3 integriert: Ziel-OID, Modus und Folgen prüfen; Hard verlangt zusätzliche Bestätigung |
 | Leichte und annotierte Tags, Löschen | Nur leichtes Tag | Annotieren/Löschen im Luna-Repositorypaket |
-| Tag aus bestehendem Namen ableiten; Tag pushen/ersetzen | Fehlt | Tagliste als Vorlage; Force bleibt gesonderter Ausbau |
+| Tag aus bestehendem Namen ableiten; Tag pushen/ersetzen | Fehlt | Runde 4: Namensvorlage, leichte/annotierte Tags und geprüfter lokaler Ersatz; normaler Tag-Push vorhanden, Remote-Tag-Ersatz weiter offen |
 | Stash speichern, anwenden, poppen, löschen | Vorhanden | Runde 3: Namen, untracked/keep-index/staged-only und optionale Index-Wiederherstellung |
 | Konflikte Dateiweise ours/theirs/manuell lösen | Vorhanden | Binärspezifische Vorschau fehlt; kein Auto-Abbruch nach Konflikt |
 
@@ -351,3 +351,9 @@ Luna-Paket `blame_completion`: Die Blame-Ansicht besitzt Heatmaps für Alter und
 „Track moved/copied lines“ verwendet tatsächlich System-Git mit `blame --line-porcelain -M -C -C -C`; die entsprechenden libgit2-Flags sind in der verwendeten Bibliothek nicht implementiert und werden daher nicht als Ersatz ausgegeben. Herkunftsdatei/-zeile bleiben erhalten, Unicodepfade erscheinen im Tooltip. Arbeitskopie und historische Revision bleiben getrennte Quellen; nicht committete Zeilen sind weiterhin ausdrücklich markiert. Die Ansicht nennt Git-Similaritätsgrenzen für kurze/geänderte Blöcke. Quelldaten sind auf 4 MiB begrenzt, Git-Ausgabe auf 128 MiB, stderr wird begrenzt gespeichert und vollständig geleert; Fehler sind sichtbar.
 
 Abnahme: Sechs gezielte Tests prüfen echte Autoren-/Revisionen-/Arbeitskopiezuordnung, Kopie mit Unicode-/Glob-Zeichen im Pfad, Rename/Move, Heatmap-Grenzfälle und Prozess-/Größenfehler. Native UI-Prüfung zeigt Blame und seine Optionen im Test-Repository. Der während der Pause gesicherte WIP ist damit durch die integrierte Implementierung ersetzt.
+
+### Tagvorlagen, geprüfter Ersatz und referenzgebundenes Löschen
+
+Version tags übernimmt vorhandene Tags als Vorlage: Name mit fortlaufender Endnummer wird erhöht vorgeschlagen, Tagart und Nachricht bleiben als editierbare Vorlage erhalten. Leichte und annotierte neue Tags zeigen vor Bestätigung die aufgelöste Commit-OID. Beim Ersetzen eines vorhandenen lokalen Tags sind alte Objekt-OID und neues Ziel sichtbar; es ist eine zusätzliche Ersetzungsbestätigung nötig. Referenzänderungen verwenden atomaren Compare-and-swap, sodass ein zwischenzeitlich geändertes Tag nicht überschrieben wird. Auch der bestehende Löschdialog bindet sich jetzt an die konkrete Tag-OID und verwendet einen erwarteten alten Wert.
+
+Abnahme: Zwei Tests prüfen Vorschlagsnamen (Unicode, Nummernbreite, Überlauf), echte annotierte/leichte Tags, konkurrierende Ersetzung und Löschung sowie veränderte HEAD-Ziele. Index und Arbeitsdatei bleiben bytegleich. Der Ersatz eines Remote-Tags gehört nicht zu dieser lokalen Operation und bleibt ein gesonderter offener Schritt.
