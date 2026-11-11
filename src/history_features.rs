@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub(super) struct HistoryOptions {
@@ -12,9 +13,53 @@ pub(super) struct HistoryOptions {
     pub hide_date: bool,
     pub hide_id: bool,
     pub hide_untracked: bool,
-    pub query_cache: Option<(String, Result<HashSet<String>, String>)>,
     pub navigation: Vec<String>,
     pub navigation_index: usize,
+}
+
+pub(super) struct HistoryViewCache {
+    by_id: HashMap<String, usize>,
+    topology_key: Option<(bool, bool)>,
+    topology: Vec<usize>,
+    graph: Option<Arc<HistoryGraph>>,
+    filter_key: Option<(String, bool)>,
+    rows: Result<Arc<HistoryRows>, String>,
+}
+
+pub(super) struct HistoryRows {
+    pub indices: Vec<usize>,
+    pub positions: HashMap<usize, usize>,
+}
+
+pub(super) struct HistoryGraph {
+    pub rows: Vec<Option<GraphRow>>,
+    pub lane_count: usize,
+}
+
+impl Default for HistoryViewCache {
+    fn default() -> Self {
+        Self {
+            by_id: HashMap::new(),
+            topology_key: None,
+            topology: Vec::new(),
+            graph: None,
+            filter_key: None,
+            rows: Ok(Arc::new(HistoryRows {
+                indices: Vec::new(),
+                positions: HashMap::new(),
+            })),
+        }
+    }
+}
+
+impl HistoryViewCache {
+    pub(super) fn invalidate_topology(&mut self) {
+        self.topology_key = None;
+    }
+
+    pub(super) fn commit_index(&self, id: &str) -> Option<usize> {
+        self.by_id.get(id).copied()
+    }
 }
 
 #[derive(Debug)]
@@ -131,24 +176,126 @@ impl GritApp {
         if !stars.remove(id) {
             stars.insert(id.to_owned());
         }
-    }
-    pub(super) fn history_matches(&mut self) -> Result<HashSet<String>, String> {
-        if let Some((query, result)) = &self.history_options.query_cache
-            && query == &self.search
-        {
-            return result.clone();
+        if self.history_options.only_starred {
+            self.history_view_cache.filter_key = None;
         }
-        let repo = self.repo();
-        let result = parse_query(&self.search).map(|terms| {
-            self.commits
-                .iter()
-                .filter(|c| matches_terms(c, &terms, repo.as_ref()))
-                .map(|c| c.id.clone())
-                .collect()
-        });
-        self.history_options.query_cache = Some((self.search.clone(), result.clone()));
-        result
     }
+    pub(super) fn history_rows(&mut self) -> Result<Arc<HistoryRows>, String> {
+        let topology_key = (
+            self.history_options.first_parent,
+            self.history_options.sort_by_date,
+        );
+        if self.history_view_cache.topology_key != Some(topology_key) {
+            let first_parent = if topology_key.0 {
+                let start = self.repo().and_then(|repo| {
+                    repo.revparse_single(
+                        self.history_scope
+                            .as_ref()
+                            .map(|(name, _)| name.as_str())
+                            .unwrap_or("HEAD"),
+                    )
+                    .and_then(|object| object.peel_to_commit())
+                    .ok()
+                    .map(|commit| commit.id().to_string())
+                });
+                start.map(|id| first_parent_chain(&self.commits, &id))
+            } else {
+                None
+            };
+            let cache = &mut self.history_view_cache;
+            if cache.by_id.is_empty() {
+                cache.by_id = self
+                    .commits
+                    .iter()
+                    .enumerate()
+                    .map(|(index, commit)| (commit.id.clone(), index))
+                    .collect();
+            }
+            cache.topology = self
+                .commits
+                .iter()
+                .enumerate()
+                .filter_map(|(index, commit)| {
+                    (self
+                        .history_scope
+                        .as_ref()
+                        .is_none_or(|(_, ids)| ids.contains(&commit.id))
+                        && first_parent
+                            .as_ref()
+                            .is_none_or(|ids| ids.contains(&commit.id)))
+                    .then_some(index)
+                })
+                .collect();
+            if topology_key.1 {
+                cache
+                    .topology
+                    .sort_by_key(|&index| std::cmp::Reverse(self.commits[index].timestamp));
+            }
+            cache.topology_key = Some(topology_key);
+            cache.filter_key = None;
+            cache.graph = None;
+        }
+
+        let only_starred = self.history_options.only_starred;
+        if !self
+            .history_view_cache
+            .filter_key
+            .as_ref()
+            .is_some_and(|(query, starred)| query == &self.search && *starred == only_starred)
+        {
+            let result = parse_query(&self.search).map(|terms| {
+                let repo = terms
+                    .iter()
+                    .any(|term| matches!(term, Term::Path(_)))
+                    .then(|| self.repo())
+                    .flatten();
+                let stars = self
+                    .path
+                    .as_ref()
+                    .and_then(|path| self.history_options.stars.get(&repo_storage_key(path)));
+                let indices: Vec<_> = self
+                    .history_view_cache
+                    .topology
+                    .iter()
+                    .copied()
+                    .filter(|&index| {
+                        let commit = &self.commits[index];
+                        (!only_starred || stars.is_some_and(|ids| ids.contains(&commit.id)))
+                            && matches_terms(commit, &terms, repo.as_ref())
+                    })
+                    .collect();
+                let positions = indices
+                    .iter()
+                    .enumerate()
+                    .map(|(row, &index)| (index, row))
+                    .collect();
+                Arc::new(HistoryRows { indices, positions })
+            });
+            self.history_view_cache.rows = result;
+            self.history_view_cache.filter_key = Some((self.search.clone(), only_starred));
+        }
+        self.history_view_cache.rows.clone()
+    }
+
+    pub(super) fn history_graph(&mut self) -> Option<Arc<HistoryGraph>> {
+        if self.history_options.hide_graph {
+            return None;
+        }
+        let cache = &mut self.history_view_cache;
+        let graph = cache.graph.get_or_insert_with(|| {
+            let commits = cache.topology.iter().map(|&index| &self.commits[index]);
+            let graph_rows = graph_layout(commits, self.history_options.first_parent);
+            let mut rows: Vec<_> = (0..self.commits.len()).map(|_| None).collect();
+            let mut lane_count = 1;
+            for (&index, row) in cache.topology.iter().zip(graph_rows) {
+                lane_count = lane_count.max(row.occupied.len());
+                rows[index] = Some(row);
+            }
+            Arc::new(HistoryGraph { rows, lane_count })
+        });
+        Some(Arc::clone(graph))
+    }
+
     pub(super) fn history_display_options(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("View", |ui| {
             ui.checkbox(

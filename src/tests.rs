@@ -199,14 +199,14 @@ fn graph_layout_keeps_two_merge_parent_lanes_connected() {
         refs: Vec::new(),
         ..Default::default()
     };
-    let commits = vec![
+    let commits = [
         make_commit("merge", &["left", "right"]),
         make_commit("left", &["base"]),
         make_commit("right", &["base"]),
         make_commit("base", &[]),
     ];
 
-    let rows = graph_layout(&commits);
+    let rows = graph_layout(commits.iter(), false);
     assert_eq!(rows[0].parents, vec![0, 1]);
     assert_eq!(rows[1].lane, 0);
     assert_eq!(rows[2].lane, 1);
@@ -350,4 +350,53 @@ fn whitespace_display_is_read_only_and_disables_line_staging() {
     assert!(app.operation.is_none());
     assert!(app.notice.contains("Show whitespace"));
     assert!(statuses(&repo).iter().all(|c| !c.staged));
+}
+
+#[test]
+fn history_caches_rows_and_keeps_graph_topology_when_filtering() {
+    use std::sync::Arc;
+
+    let mut app = GritApp {
+        commits: vec![
+            Commit {
+                id: "merge".into(),
+                message: "Merge branch".into(),
+                full_message: "Merge branch".into(),
+                parents: vec!["left".into(), "right".into()],
+                ..Default::default()
+            },
+            Commit {
+                id: "left".into(),
+                message: "Left change".into(),
+                full_message: "Left change".into(),
+                ..Default::default()
+            },
+            Commit {
+                id: "right".into(),
+                message: "Right change".into(),
+                full_message: "Right change".into(),
+                timestamp: 1,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let rows = app.history_rows().unwrap();
+    let graph = app.history_graph().unwrap();
+    assert_eq!(rows.indices, [0, 1, 2]);
+    app.selected_commit = Some("right".into());
+    assert!(Arc::ptr_eq(&rows, &app.history_rows().unwrap()));
+    assert!(Arc::ptr_eq(&graph, &app.history_graph().unwrap()));
+    assert_eq!(app.history_view_cache.commit_index("right"), Some(2));
+
+    app.search = "message:right".into();
+    let filtered = app.history_rows().unwrap();
+    assert_eq!(filtered.indices, [2]);
+    assert_eq!(filtered.positions[&2], 0);
+    assert!(Arc::ptr_eq(&graph, &app.history_graph().unwrap()));
+
+    app.search.clear();
+    app.history_options.sort_by_date = true;
+    assert_eq!(app.history_rows().unwrap().indices, [2, 0, 1]);
+    assert!(!Arc::ptr_eq(&graph, &app.history_graph().unwrap()));
 }

@@ -98,6 +98,9 @@ struct GritApp {
     display_diff_key: Option<(String, u32, bool)>,
     integrations: integration_features::IntegrationTools,
     history_options: history_features::HistoryOptions,
+    history_view_cache: history_features::HistoryViewCache,
+    history_load: history_load::HistoryLoad,
+    commit_detail_loader: commit_detail_features::CommitDetailLoader,
     focus_mode: bool,
     focused_history_table: bool,
     was_focused: bool,
@@ -233,6 +236,7 @@ impl GritApp {
         self.file_actions = Default::default();
         self.code_search.cancel_for_repo_change(None);
         self.selected_commit = None;
+        self.commit_detail_loader.reset();
         self.display_diff_key = None;
         let blame_preferences = self.blame_state.persistence_strings();
         self.blame_state = Default::default();
@@ -249,6 +253,9 @@ impl GritApp {
         self.history_options.navigation.clear();
         self.history_options.navigation_index = 0;
         self.history_scope = None;
+        self.history_load.invalidate();
+        self.commits.clear();
+        self.history_error = None;
         self.selected_commit_file = None;
         self.load_large_diff = false;
         self.commit_files.clear();
@@ -483,7 +490,6 @@ impl GritApp {
     fn refresh(&mut self) {
         self.preview_tools.invalidate();
         let Some(mut repo) = self.repo() else { return };
-        self.history_options.query_cache = None;
         self.display_diff_key = None;
         self.branch = repo
             .head()
@@ -536,19 +542,11 @@ impl GritApp {
             .filter_map(|reference| reference.shorthand().map(str::to_owned))
             .collect();
         self.changes = statuses(&repo);
-        match history(&repo) {
-            Ok(commits) => {
-                self.commits = commits;
-                self.history_error = None;
-            }
-            Err(error) => {
-                self.commits.clear();
-                self.history_error = Some(error);
-            }
-        }
-        if let Some((name, _)) = self.history_scope.clone() {
-            self.set_history_scope(Some(name));
-        }
+        let path = self
+            .path
+            .clone()
+            .unwrap_or_else(|| repo.workdir().unwrap_or(repo.path()).to_path_buf());
+        self.history_load.request(path, history_signature(&repo));
         self.tracked_files = repo
             .index()
             .map(|index| {
@@ -563,16 +561,8 @@ impl GritApp {
             self.stashes.push((index, message.to_owned()));
             true
         });
-        if let Some(id) = self.selected_commit.clone() {
-            self.commit_files = commit_files(&repo, &id);
-            if self
-                .selected_commit_file
-                .as_ref()
-                .is_some_and(|path| !self.commit_files.iter().any(|file| &file.path == path))
-            {
-                self.selected_commit_file = None;
-            }
-            self.diff = diff_commit_path(&repo, &id, self.selected_commit_file.as_deref())
+        if self.selected_commit.is_some() {
+            self.request_commit_detail(false);
         } else if let Some(change) = self
             .changes
             .iter()
@@ -823,6 +813,9 @@ impl GritApp {
         }
     }
     fn ensure_display_diff(&mut self) {
+        if self.tab == 1 && self.selected_commit.is_some() {
+            return;
+        }
         let matches = self
             .display_diff_key
             .as_ref()
@@ -839,16 +832,7 @@ impl GritApp {
         let rendered = if self.diff_preferences == Default::default() {
             Ok(self.diff.clone())
         } else if let Some(repo) = self.repo() {
-            if self.tab == 1
-                && let Some(id) = self.selected_commit.as_deref()
-            {
-                diff_preferences::render_commit_diff(
-                    &repo,
-                    id,
-                    self.selected_commit_file.as_deref(),
-                    &self.diff_preferences,
-                )
-            } else if self.tab == 0
+            if self.tab == 0
                 && let Some(path) = self.selected_file.as_deref()
             {
                 diff_preferences::render_worktree_diff(
@@ -1616,44 +1600,26 @@ impl GritApp {
             );
             return;
         }
-        let matching = match self.history_matches() {
-            Ok(ids) => ids,
+        if self.history_load.is_pending() {
+            if self.commits.is_empty() {
+                self.empty(ui, "Loading history…", "Reading commits in the background.");
+                return;
+            }
+            ui.label(RichText::new("Updating history…").small().color(muted()));
+        }
+        let rows = match self.history_rows() {
+            Ok(rows) => rows,
             Err(error) => {
                 ui.colored_label(theme_color([235, 139, 145], [168, 35, 49]), error);
                 return;
             }
         };
-        let first_parent = if self.history_options.first_parent {
-            let start = self.repo().and_then(|r| {
-                r.revparse_single(
-                    self.history_scope
-                        .as_ref()
-                        .map(|(n, _)| n.as_str())
-                        .unwrap_or("HEAD"),
-                )
-                .ok()
-                .map(|o| o.id().to_string())
-            });
-            start.map(|id| history_features::first_parent_chain(&self.commits, &id))
-        } else {
-            None
-        };
-        let mut rows: Vec<_> = self
-            .commits
-            .iter()
-            .filter(|c| {
-                self.history_scope
-                    .as_ref()
-                    .is_none_or(|(_, ids)| ids.contains(&c.id))
-                    && matching.contains(&c.id)
-                    && first_parent.as_ref().is_none_or(|ids| ids.contains(&c.id))
-                    && (!self.history_options.only_starred || self.is_starred(&c.id))
-            })
-            .cloned()
-            .collect();
-        if self.history_options.sort_by_date {
-            rows.sort_by_key(|c| std::cmp::Reverse(c.timestamp));
-        }
+        let position = self
+            .selected_commit
+            .as_deref()
+            .and_then(|id| self.history_view_cache.commit_index(id))
+            .and_then(|index| rows.positions.get(&index).copied());
+        let rows = &rows.indices;
         if rows.is_empty() {
             let repository = self
                 .path
@@ -1682,19 +1648,12 @@ impl GritApp {
             );
             return;
         }
-        let selection_visible = self
-            .selected_commit
-            .as_ref()
-            .is_some_and(|id| rows.iter().any(|commit| &commit.id == id));
-        if !selection_visible && let Some(commit) = rows.first() {
-            self.select_history_commit(commit.id.clone());
+        if position.is_none() {
+            self.select_history_commit(self.commits[rows[0]].id.clone());
         }
         let mut keyboard_target = None;
         if self.focused_history_table && !ui.ctx().wants_keyboard_input() {
-            let current = rows
-                .iter()
-                .position(|c| self.selected_commit.as_deref() == Some(&c.id))
-                .unwrap_or(0);
+            let current = position.unwrap_or(0);
             let target = ui.ctx().input_mut(|input| {
                 if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
                     Some((current + 1).min(rows.len() - 1))
@@ -1709,7 +1668,9 @@ impl GritApp {
                 }
             });
             if let Some(target) = target {
-                self.select_history_commit(rows[target].id.clone());
+                if target != current {
+                    self.select_history_commit(self.commits[rows[target]].id.clone());
+                }
                 keyboard_target = Some(target);
             }
         }
@@ -1717,38 +1678,8 @@ impl GritApp {
             self.commit_detail_view(ui);
             return;
         }
-        // Keep all ancestors in the selected scope when computing graph lanes.
-        // A text search must not change the topology or introduce unrelated branch lanes.
-        let mut topology: Vec<_> = self
-            .commits
-            .iter()
-            .filter(|c| {
-                self.history_scope
-                    .as_ref()
-                    .is_none_or(|(_, ids)| ids.contains(&c.id))
-            })
-            .cloned()
-            .collect();
-        if let Some(ids) = &first_parent {
-            topology.retain(|c| ids.contains(&c.id));
-            for c in &mut topology {
-                c.parents.truncate(1);
-            }
-        }
-        if self.history_options.sort_by_date {
-            topology.sort_by_key(|c| std::cmp::Reverse(c.timestamp));
-        }
-        let graph = graph_layout(&topology);
-        let graph_by_id: HashMap<_, _> = topology
-            .iter()
-            .zip(&graph)
-            .map(|(c, g)| (c.id.clone(), g))
-            .collect();
-        let lane_count = graph
-            .iter()
-            .map(|r| r.before.len().max(r.after.len()))
-            .max()
-            .unwrap_or(1);
+        let graph = self.history_graph();
+        let lane_count = graph.as_ref().map_or(1, |graph| graph.lane_count);
         egui::TopBottomPanel::top(if self.focus_mode {
             "history_focused_table"
         } else {
@@ -1843,6 +1774,7 @@ impl GritApp {
             }
             ui.separator();
             let mut picked = None;
+            let mut toggle_star = None;
             ui.spacing_mut().item_spacing.y = 0.;
             let scroll = egui::ScrollArea::vertical()
                 .id_salt("commit_rows")
@@ -1852,9 +1784,15 @@ impl GritApp {
             } else {
                 scroll
             };
+            let stars = self.path.as_ref().and_then(|path| {
+                self.history_options
+                    .stars
+                    .get(&history_features::repo_storage_key(path))
+            });
             scroll.show_rows(ui, row_height, rows.len(), |ui, range| {
                 for i in range {
-                    let commit = &rows[i];
+                    let commit_index = rows[i];
+                    let commit = &self.commits[commit_index];
                     let (rect, response) =
                         ui.allocate_exact_size(egui::vec2(width, row_height), egui::Sense::click());
                     let selected = self.selected_commit.as_deref() == Some(&commit.id);
@@ -1875,13 +1813,15 @@ impl GritApp {
                         rect.min + egui::vec2(8., 0.),
                         egui::vec2(graph_width - 12., row_height),
                     );
-                    if !self.history_options.hide_graph
-                        && let Some(row) = graph_by_id.get(commit.id.as_str())
+                    if let Some(row) = graph
+                        .as_ref()
+                        .and_then(|graph| graph.rows[commit_index].as_ref())
                     {
                         draw_graph_row(&ui.painter().with_clip_rect(graph_rect), graph_rect, row);
                     }
                     let mut x = rect.left() + graph_width;
-                    if self.is_starred(&commit.id) {
+                    let starred = stars.is_some_and(|ids| ids.contains(&commit.id));
+                    if starred {
                         ui.painter().text(
                             egui::pos2(x, rect.center().y),
                             egui::Align2::LEFT_CENTER,
@@ -1944,14 +1884,14 @@ impl GritApp {
                     }
                     response.clone().context_menu(|ui| {
                         if ui
-                            .button(if self.is_starred(&commit.id) {
+                            .button(if starred {
                                 "Remove star"
                             } else {
                                 "Star commit"
                             })
                             .clicked()
                         {
-                            self.toggle_star(&commit.id);
+                            toggle_star = Some(commit.id.clone());
                             ui.close_menu();
                         }
                         if ui.button("Copy SHA").clicked() {
@@ -1965,6 +1905,9 @@ impl GritApp {
                     ));
                 }
             });
+            if let Some(id) = toggle_star {
+                self.toggle_star(&id);
+            }
             if let Some(id) = picked {
                 self.select_history_commit(id);
             }
@@ -1984,7 +1927,12 @@ impl GritApp {
             );
             return;
         };
-        let Some(commit) = self.commits.iter().find(|commit| commit.id == id).cloned() else {
+        let Some(commit) = self
+            .history_view_cache
+            .commit_index(&id)
+            .and_then(|index| self.commits.get(index))
+            .cloned()
+        else {
             self.empty(
                 ui,
                 "Commit unavailable",
@@ -2189,10 +2137,17 @@ impl GritApp {
             self.selected_commit_file = Some(path.clone());
         }
         if all || picked.is_some() {
-            self.diff = self
-                .repo()
-                .map(|r| diff_commit_path(&r, &id, self.selected_commit_file.as_deref()))
-                .unwrap_or_default();
+            self.request_commit_detail(false);
+        }
+        if self.commit_detail_loader.diff_debounce_ready() {
+            self.request_commit_detail(true);
+        } else {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(150));
+        }
+        if self.commit_detail_loader.current_is_pending() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(100));
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(panel()).inner_margin(8.))
@@ -2681,7 +2636,14 @@ fn statuses(r: &Repository) -> Vec<Change> {
         })
         .unwrap_or_default()
 }
+#[cfg(test)]
 fn history(r: &Repository) -> Result<Vec<Commit>, String> {
+    history_with_cancel(r, || false)
+}
+fn history_with_cancel(
+    r: &Repository,
+    mut cancelled: impl FnMut() -> bool,
+) -> Result<Vec<Commit>, String> {
     let mut w = r.revwalk().map_err(|error| error.message().to_owned())?;
     w.push_glob("refs/heads/*")
         .map_err(|error| error.message().to_owned())?;
@@ -2707,6 +2669,9 @@ fn history(r: &Repository) -> Result<Vec<Commit>, String> {
     }
     let mut commits = Vec::new();
     for id in w {
+        if cancelled() {
+            return Err("History loading cancelled".into());
+        }
         let id = id.map_err(|error| error.message().to_owned())?;
         let c = r
             .find_commit(id)
@@ -2738,54 +2703,104 @@ fn history(r: &Repository) -> Result<Vec<Commit>, String> {
     }
     Ok(commits)
 }
+fn history_signature(repo: &Repository) -> String {
+    let mut refs = Vec::new();
+    match repo.references() {
+        Ok(references) => {
+            for reference in references {
+                match reference {
+                    Ok(reference) => {
+                        let name = reference.name().unwrap_or("");
+                        let target = reference
+                            .target()
+                            .map(|oid| oid.to_string())
+                            .or_else(|| {
+                                reference
+                                    .peel_to_commit()
+                                    .ok()
+                                    .map(|commit| commit.id().to_string())
+                            })
+                            .unwrap_or_default();
+                        refs.push(format!("{name}={target}"));
+                    }
+                    Err(error) => refs.push(format!("REF_ERROR={}", error.code() as i32)),
+                }
+            }
+        }
+        Err(error) => refs.push(format!("REFS_ERROR={}", error.code() as i32)),
+    }
+    refs.sort();
+    let head = repo
+        .head()
+        .map(|head| {
+            format!(
+                "{}={}",
+                head.name().unwrap_or("HEAD"),
+                head.target().map(|id| id.to_string()).unwrap_or_default()
+            )
+        })
+        .unwrap_or_else(|error| format!("HEAD_ERROR={}", error.code() as i32));
+    let shallow = repo.commondir().join("shallow");
+    let shallow_state = match std::fs::read_to_string(shallow) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => format!("READ_ERROR={:?}", error.kind()),
+    };
+    format!(
+        "{}\n{head}\nshallow={}\n{}",
+        refs.join("\n"),
+        repo.is_shallow(),
+        shallow_state
+    )
+}
 #[derive(Default)]
 struct GraphRow {
     lane: usize,
     parents: Vec<usize>,
-    before: Vec<Option<String>>,
-    after: Vec<Option<String>>,
+    occupied: Vec<bool>,
 }
-fn graph_layout(commits: &[Commit]) -> Vec<GraphRow> {
-    let mut lanes: Vec<Option<String>> = Vec::new();
+fn graph_layout<'a>(
+    commits: impl ExactSizeIterator<Item = &'a Commit>,
+    first_parent: bool,
+) -> Vec<GraphRow> {
+    let mut lanes: Vec<Option<&str>> = Vec::new();
     let mut rows = Vec::with_capacity(commits.len());
     for commit in commits {
-        let lane = if let Some(index) = lanes
-            .iter()
-            .position(|entry| entry.as_deref() == Some(&commit.id))
-        {
+        let lane = if let Some(index) = lanes.iter().position(|entry| *entry == Some(&commit.id)) {
             index
         } else if let Some(index) = lanes.iter().position(Option::is_none) {
-            lanes[index] = Some(commit.id.clone());
             index
         } else {
-            lanes.push(Some(commit.id.clone()));
+            lanes.push(None);
             lanes.len() - 1
         };
-        let before = lanes.clone();
         lanes[lane] = None;
-        let mut parents = Vec::with_capacity(commit.parents.len());
-        for (parent_index, parent) in commit.parents.iter().enumerate() {
-            let parent_lane = if let Some(index) = lanes
-                .iter()
-                .position(|entry| entry.as_deref() == Some(parent))
-            {
-                index
-            } else if parent_index == 0 {
-                lane
-            } else if let Some(index) = lanes.iter().position(Option::is_none) {
-                index
-            } else {
-                lanes.push(None);
-                lanes.len() - 1
-            };
-            lanes[parent_lane] = Some(parent.clone());
+        let parent_ids = if first_parent {
+            &commit.parents[..commit.parents.len().min(1)]
+        } else {
+            &commit.parents
+        };
+        let mut parents = Vec::with_capacity(parent_ids.len());
+        for (parent_index, parent) in parent_ids.iter().enumerate() {
+            let parent_lane =
+                if let Some(index) = lanes.iter().position(|entry| *entry == Some(parent)) {
+                    index
+                } else if parent_index == 0 {
+                    lane
+                } else if let Some(index) = lanes.iter().position(Option::is_none) {
+                    index
+                } else {
+                    lanes.push(None);
+                    lanes.len() - 1
+                };
+            lanes[parent_lane] = Some(parent);
             parents.push(parent_lane);
         }
         rows.push(GraphRow {
             lane,
             parents,
-            before,
-            after: lanes.clone(),
+            // Only the current lane can lose an occupant. It is drawn separately.
+            occupied: lanes.iter().map(Option::is_some).collect(),
         });
     }
     rows
@@ -2801,7 +2816,7 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
     ];
     let x_for = |lane: usize| rect.left() + 8. + lane as f32 * 16.;
     let center_y = rect.center().y;
-    let width = row.before.len().max(row.after.len());
+    let width = row.occupied.len();
     for lane in 0..width {
         let x = x_for(lane);
         let color = colors[lane % colors.len()];
@@ -2828,9 +2843,7 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
                 [egui::pos2(x, center_y), egui::pos2(x, rect.bottom())],
                 Stroke::new(2., color),
             );
-        } else if row.before.get(lane).is_some_and(Option::is_some)
-            || row.after.get(lane).is_some_and(Option::is_some)
-        {
+        } else if row.occupied[lane] {
             painter.line_segment(
                 [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
                 Stroke::new(2., color),
@@ -3087,6 +3100,27 @@ impl eframe::App for GritApp {
         );
     }
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        if let Some(loaded) = self.history_load.poll()
+            && self.path.as_ref() == Some(&loaded.path)
+        {
+            match loaded.result {
+                Ok(commits) => {
+                    self.commits = commits;
+                    self.history_error = None;
+                }
+                Err(error) => {
+                    self.commits.clear();
+                    self.history_error = Some(error);
+                }
+            }
+            self.history_view_cache = Default::default();
+            if let Some(name) = self.history_scope.as_ref().map(|(name, _)| name.clone()) {
+                self.set_history_scope(Some(name));
+            }
+        }
+        if self.history_load.is_pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         let theme = ctx.theme();
         if self.settings_last_theme != Some(theme) {
             self.settings.font_error = self.settings.apply_settings(ctx).err();
@@ -3096,6 +3130,24 @@ impl eframe::App for GritApp {
             !ctx.style().visuals.dark_mode,
             std::sync::atomic::Ordering::Relaxed,
         );
+        if let Some((key, result)) = self.commit_detail_loader.take_current()
+            && self.path.as_ref() == Some(&key.repo)
+            && self.selected_commit.as_deref() == Some(key.commit.as_str())
+            && self.selected_commit_file.as_deref() == key.file.as_deref()
+            && key.matches_preferences(&self.diff_preferences)
+        {
+            match result {
+                Ok(detail) => self.apply_commit_detail(detail),
+                Err(error) => {
+                    self.commit_files.clear();
+                    self.display_diff.clear();
+                    self.display_diff_error = Some(error);
+                }
+            }
+        }
+        if self.commit_detail_loader.current_is_pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         if self.operation.is_none() {
             let request = self
                 .instance_handle
@@ -3344,6 +3396,7 @@ impl eframe::App for GritApp {
 }
 mod blame_features;
 mod code_search_features;
+mod commit_detail_features;
 mod commit_features;
 mod diff_features;
 mod diff_preferences;
@@ -3351,6 +3404,7 @@ mod external_diff_features;
 mod file_action_features;
 mod file_features;
 mod history_features;
+mod history_load;
 mod hosting_api_features;
 mod hosting_features;
 mod integration_features;

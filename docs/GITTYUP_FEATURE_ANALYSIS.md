@@ -377,3 +377,13 @@ Primärquellen: [GitHub Pull Requests](https://docs.github.com/en/rest/pulls/pul
 Auf die neue Benutzeranweisung wird nach diesem Commit ein aktuelles AppImage erzeugt und anschließend pausiert, unabhängig vom sonstigen Vier-Commit-Rhythmus. Plugins sind ausgenommen, der Updater ist zurückgestellt. Die noch offene SHA-256-Integration ist nicht Teil des Pakets: Der unvollständige CLI-Backend-Entwurf liegt unter `target/paused-work/cli_repository.rs.wip`; drei isolierte Harness-Tests ersetzen keine App-Integration. Die LFS-Referenzprüfung nennt zusätzlich offene lokale Einstellungen: `lfs.url`, `lfs.pruneoffsetdays`, `lfs.fetchrecentalways`, `lfs.fetchrecentrefsdays`, `lfs.fetchrecentcommitsdays`, LFS-Umgebungsanzeige und bestätigte Deinitialisierung. Dazu wurde keine Implementierung eingebunden. Ebenfalls weiter offen: vollständige Übersetzung, Remote-Tag-Ersatz und weitere Einzelgrenzen aus der Matrix.
 
 Die abschließende Gesamtabnahme fand einen nicht deterministischen Blame-Fehlerpfad: Beendet Git sich vor dem Lesen von stdin, konnte ein Broken-Pipe-Fehler die eigentliche Git-Fehlermeldung verdecken. Der Worker sammelt Status und stderr jetzt auch in diesem Fall vollständig ein und hält das strukturierte Git-Protokoll mit C-Locale stabil. Die Korrektur wird im selben Integrationscommit aufgenommen.
+
+### Reaktionszeit bei großen Commit-Historien
+
+Die Historienansicht zeichnet weiterhin nur sichtbare Zeilen. Gefilterte Zeilenindizes, Commit-Positionen und Graph-Spuren werden zwischengespeichert. Eine Textsuche ändert die sichtbaren Zeilen, lässt aber die Graph-Topologie der ausgewählten Branches erhalten. Die Commit-Auswahl und die Pfeiltasten greifen über Indizes auf die aktuelle Liste zu.
+
+Das Einlesen der vollständigen Historie läuft im Hintergrund. Änderungen an Referenzen, HEAD und der Shallow-Grenze lösen einen neuen Durchlauf aus. Solange eine neue Historie geladen wird, kann die bisherige Liste weiter angezeigt werden. Dateiliste und Diff des ausgewählten Commits werden separat im Hintergrund geladen. Schnelle Auswahlwechsel ersetzen wartende Anfragen, und ein begrenzter Cache hält kürzlich betrachtete Ergebnisse vor.
+
+Für die Messung wurden lokale Git-Repositories mit 10.000 und 100.000 linearen Commits verwendet. Im Debug-Build dauerte der initiale Aufbau von Liste und Graph rund 72 bzw. 554 ms. Die anschließende Abfrage von Liste, Graph und Auswahlposition lag bei beiden Größen unter 4 µs pro Aufruf. Diese Messung umfasst die Datenaufbereitung der Historienansicht, ohne Zeichnen oder Diff-Berechnung.
+
+Abnahme: 132 Tests bestanden. Die neuen Regressionstests prüfen die Wiederverwendung des Graphen bei Textfiltern, die Reihenfolge wartender Anfragen und das Laden nach Ref- und HEAD-Änderungen.

@@ -950,10 +950,7 @@ impl GritApp {
                         {
                             self.select_history_commit(result.commit.clone());
                             self.selected_commit_file = Some(result.path.clone());
-                            if let Some(repo) = self.repo() {
-                                self.diff =
-                                    diff_commit_path(&repo, &result.commit, Some(&result.path));
-                            }
+                            self.request_commit_detail(false);
                             self.notice = format!("Opened {}:{}", result.path, result.line);
                             self.tab = 1;
                         }

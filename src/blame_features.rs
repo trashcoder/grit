@@ -788,7 +788,6 @@ impl GritApp {
         });
         if let Some(id) = selected_commit {
             self.search.clear();
-            self.history_options.query_cache = None;
             self.history_options.only_starred = false;
             self.history_options.first_parent = false;
             self.set_history_scope(None);

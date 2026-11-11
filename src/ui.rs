@@ -29,6 +29,7 @@ pub(super) fn configure_style(ctx: &egui::Context) {
 
 impl GritApp {
     pub(super) fn set_history_scope(&mut self, name: Option<String>) {
+        self.history_view_cache.invalidate_topology();
         self.history_scope = name.map(|name| {
             let mut ids = HashSet::new();
             if let Some(repo) = self.repo()
@@ -57,12 +58,70 @@ impl GritApp {
         self.load_history_commit(id);
     }
     pub(super) fn load_history_commit(&mut self, id: String) {
-        self.selected_diff_lines.clear();
-        self.selected_commit = Some(id.clone());
+        if self.selected_commit.as_deref() != Some(&id) {
+            self.commit_detail_loader.clear_selection();
+        }
+        self.selected_commit = Some(id);
         self.selected_commit_file = None;
-        if let Some(repo) = self.repo() {
-            self.commit_files = commit_files(&repo, &id);
-            self.diff = diff_commit_path(&repo, &id, None);
+        self.request_commit_detail(false);
+    }
+
+    pub(super) fn request_commit_detail(&mut self, include_diff: bool) {
+        let (Some(repo), Some(id)) = (self.path.clone(), self.selected_commit.clone()) else {
+            return;
+        };
+        let file = self.selected_commit_file.clone();
+        let context = self.diff_preferences.context_lines;
+        let whitespace = self.diff_preferences.ignore_whitespace;
+        let same_selection = self.commit_detail_loader.is_current_selection(
+            &repo,
+            &id,
+            file.as_deref(),
+            context,
+            whitespace,
+        );
+        if !self.commit_detail_loader.request(
+            repo.clone(),
+            id.clone(),
+            file.clone(),
+            context,
+            whitespace,
+            include_diff,
+        ) {
+            return;
+        }
+        if !same_selection {
+            if file.is_none() {
+                self.commit_files.clear();
+            }
+            self.diff.clear();
+            self.display_diff.clear();
+            self.display_diff_error = None;
+            self.display_diff_key = None;
+            self.selected_diff_lines.clear();
+            self.load_large_diff = false;
+        }
+        if let Some(detail) =
+            self.commit_detail_loader
+                .cached(&repo, &id, file.as_deref(), context, whitespace)
+        {
+            self.apply_commit_detail(detail);
+        }
+    }
+
+    pub(super) fn apply_commit_detail(&mut self, detail: commit_detail_features::CommitDetail) {
+        self.commit_files = detail.files;
+        if let Some(diff) = detail.diff {
+            match diff {
+                Ok(patch) => {
+                    self.display_diff = patch;
+                    self.display_diff_error = None;
+                }
+                Err(error) => {
+                    self.display_diff.clear();
+                    self.display_diff_error = Some(error);
+                }
+            }
         }
     }
 
@@ -355,6 +414,13 @@ impl GritApp {
             ui.checkbox(&mut self.wrap_diff, "Wrap lines");
             self.diff_preferences_ui(ui);
         });
+        if self.tab == 1
+            && (!self.commit_detail_loader.diff_debounce_ready()
+                || self.commit_detail_loader.current_is_pending())
+        {
+            ui.label(RichText::new("Loading commit diff…").color(muted()));
+            return;
+        }
         self.ensure_display_diff();
         if let Some(error) = &self.display_diff_error {
             ui.colored_label(Color32::LIGHT_RED, error);
