@@ -34,7 +34,7 @@ jobs:
             binary: target/release/grit
             arch: x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Rust 1.100.0
         run: |
           rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
@@ -61,28 +61,28 @@ jobs:
         if: runner.os == 'Linux'
         run: ./scripts/build-appimage.sh
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.binary }}
           if-no-files-found: error
       - name: Upload Windows portable package
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: grit-windows-x86_64-portable
           path: dist/grit-windows-x86_64.zip
           if-no-files-found: error
       - name: Upload macOS app package
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: grit-macos-${{ matrix.arch }}-app
           path: dist/grit-macos-${{ matrix.arch }}.zip
           if-no-files-found: error
       - name: Upload Linux AppImage artifact
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: grit-linux-AppImage-x86_64
           path: dist/grit-x86_64.AppImage
