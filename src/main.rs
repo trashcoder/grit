@@ -2195,7 +2195,7 @@ impl GritApp {
         for b in self.branches.clone() {
             egui::Frame::new()
                 .fill(panel())
-                .stroke(Stroke::new(1., border()))
+                .stroke(Stroke::new(1.0_f32, border()))
                 .corner_radius(8)
                 .inner_margin(10.)
                 .show(ui, |ui| {
@@ -2259,7 +2259,7 @@ impl GritApp {
         for branch in self.remote_branches.clone() {
             egui::Frame::new()
                 .fill(panel())
-                .stroke(Stroke::new(1., border()))
+                .stroke(Stroke::new(1.0_f32, border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {
@@ -2370,7 +2370,7 @@ impl GritApp {
                     .unwrap_or_default();
                 egui::Frame::new()
                     .fill(panel())
-                    .stroke(Stroke::new(1., border()))
+                    .stroke(Stroke::new(1.0_f32, border()))
                     .corner_radius(8)
                     .inner_margin(10.)
                     .show(ui, |ui| {
@@ -2823,12 +2823,12 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
         if lane == row.lane {
             painter.line_segment(
                 [egui::pos2(x, rect.top()), egui::pos2(x, center_y)],
-                Stroke::new(2., color),
+                Stroke::new(2.0_f32, color),
             );
             if row.parents.contains(&lane) {
                 painter.line_segment(
                     [egui::pos2(x, center_y), egui::pos2(x, rect.bottom())],
-                    Stroke::new(2., color),
+                    Stroke::new(2.0_f32, color),
                 );
             }
         } else if row.parents.contains(&lane) {
@@ -2837,16 +2837,16 @@ fn draw_graph_row(painter: &egui::Painter, rect: egui::Rect, row: &GraphRow) {
                     egui::pos2(x_for(row.lane), center_y),
                     egui::pos2(x, center_y),
                 ],
-                Stroke::new(2., color),
+                Stroke::new(2.0_f32, color),
             );
             painter.line_segment(
                 [egui::pos2(x, center_y), egui::pos2(x, rect.bottom())],
-                Stroke::new(2., color),
+                Stroke::new(2.0_f32, color),
             );
         } else if row.occupied[lane] {
             painter.line_segment(
                 [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-                Stroke::new(2., color),
+                Stroke::new(2.0_f32, color),
             );
         }
     }
@@ -3148,6 +3148,7 @@ impl eframe::App for GritApp {
         if self.commit_detail_loader.current_is_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+        #[cfg(unix)]
         if self.operation.is_none() {
             let request = self
                 .instance_handle
@@ -3451,6 +3452,7 @@ fn main() -> eframe::Result<()> {
                 let note = handle.platform_note().map(str::to_owned);
                 (Some(handle), note)
             }
+            #[cfg(unix)]
             window_features::InstanceStartup::Forwarded => return Ok(()),
             window_features::InstanceStartup::Bypassed => (None, None),
             window_features::InstanceStartup::Unavailable(error) => (None, Some(error)),
@@ -3514,8 +3516,10 @@ fn main() -> eframe::Result<()> {
                     && let Ok(records) = history_features::decode_records(&saved)
                 {
                     app.commit_options.templates = records
-                        .chunks_exact(2)
-                        .map(|r| (r[0].clone(), r[1].clone()))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|[name, text]| (name.clone(), text.clone()))
                         .collect();
                 }
                 app.commit_options.author_name =

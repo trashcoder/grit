@@ -280,14 +280,15 @@ fn encode_text(text: &str, encoding: TextEncoding, with_bom: bool) -> Result<Vec
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
-    if !bytes.len().is_multiple_of(2) {
+    let (pairs, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
         return Err("UTF-16 input has an incomplete code unit".into());
     }
-    let units = bytes.chunks_exact(2).map(|pair| {
+    let units = pairs.iter().map(|&pair| {
         if little_endian {
-            u16::from_le_bytes([pair[0], pair[1]])
+            u16::from_le_bytes(pair)
         } else {
-            u16::from_be_bytes([pair[0], pair[1]])
+            u16::from_be_bytes(pair)
         }
     });
     char::decode_utf16(units)

@@ -1,5 +1,5 @@
 use super::*;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use std::fs;
 use std::{
     ffi::{OsStr, OsString},
@@ -190,6 +190,7 @@ fn platform_terminal(root: &Path) -> Result<Command, String> {
     }
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
 fn first_available_terminal<'a>(
     candidates: impl IntoIterator<Item = &'a str>,
     mut available: impl FnMut(&str) -> bool,
@@ -197,7 +198,7 @@ fn first_available_terminal<'a>(
     candidates.into_iter().find(|name| available(name))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn find_executable(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)
@@ -205,19 +206,19 @@ fn find_executable(name: &str) -> Option<PathBuf> {
         .find(|candidate| executable_file(candidate))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn executable_in_path(name: &str) -> bool {
     find_executable(name).is_some()
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn executable_file(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     path.is_file()
         && fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn linux_terminal_command(executable: &Path, name: &str, root: &Path) -> Command {
     let mut command = Command::new(executable);
     command.current_dir(root);
@@ -257,8 +258,8 @@ impl GritApp {
             } else {
                 Color32::WHITE
             };
-            visuals.widgets.inactive.bg_stroke = Stroke::new(1., border());
-            visuals.widgets.hovered.bg_stroke = Stroke::new(1., blue());
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, border());
+            visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, blue());
             self.hosting_api.hosting_api_ui(ui);
         });
         if self.operation.is_none() {
@@ -508,6 +509,7 @@ fn spawn_external(mut command: Command, notice: &mut String, label: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn lfs_arguments_keep_user_input_as_one_argument() {
@@ -522,7 +524,7 @@ mod tests {
         assert!(lfs_track_args("a\nb").is_err());
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn linux_terminal_selects_first_available_candidate_and_sets_working_directory() {
         let candidates = ["x-terminal-emulator", "konsole", "kgx", "gnome-terminal"];

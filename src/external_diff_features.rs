@@ -343,6 +343,8 @@ fn make_temp_dir() -> Result<PathBuf, String> {
     Err("Could not create a unique temporary directory".into())
 }
 
+// Windows must clear the read-only attribute on temporary diff inputs before deletion.
+#[cfg_attr(not(unix), allow(clippy::permissions_set_readonly_false))]
 fn cleanup_temp_dir(path: &Path) {
     let Ok(entries) = fs::read_dir(path) else {
         let _ = fs::remove_dir_all(path);
@@ -353,7 +355,7 @@ fn cleanup_temp_dir(path: &Path) {
         if let Ok(meta) = fs::symlink_metadata(&item) {
             if meta.is_dir() && !meta.file_type().is_symlink() {
                 cleanup_temp_dir(&item);
-            } else if meta.permissions().readonly() {
+            } else if meta.is_file() && meta.permissions().readonly() {
                 let mut permissions = meta.permissions();
                 #[cfg(unix)]
                 permissions.set_mode(permissions.mode() | 0o200);

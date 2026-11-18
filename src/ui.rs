@@ -9,11 +9,11 @@ pub(super) fn configure_style(ctx: &egui::Context) {
     style.visuals.faint_bg_color = panel2();
     style.visuals.override_text_color = Some(text());
     style.visuals.selection.bg_fill = Color32::from_rgb(44, 77, 108);
-    style.visuals.selection.stroke = Stroke::new(1., blue());
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1., border());
+    style.visuals.selection.stroke = Stroke::new(1.0_f32, blue());
+    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, border());
     style.visuals.widgets.inactive.weak_bg_fill = panel2();
     style.visuals.widgets.inactive.bg_fill = panel2();
-    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1., border());
+    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, border());
     style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(49, 57, 69);
     style.spacing.item_spacing = egui::vec2(6., 4.);
     style.spacing.button_padding = egui::vec2(10., 5.);
@@ -607,7 +607,7 @@ impl GritApp {
                         ui.painter().rect_stroke(
                             mark,
                             1.,
-                            Stroke::new(1., if selected { blue() } else { muted() }),
+                            Stroke::new(1.0_f32, if selected { blue() } else { muted() }),
                             egui::StrokeKind::Inside,
                         );
                         if selected {
@@ -634,7 +634,7 @@ impl GritApp {
                             rect.left_top() + egui::vec2(100. * scale, 0.),
                             rect.left_bottom() + egui::vec2(100. * scale, 0.),
                         ],
-                        Stroke::new(1., border()),
+                        Stroke::new(1.0_f32, border()),
                     );
                     ui.painter()
                         .galley(rect.min + egui::vec2(text_offset, 2.), galley, color);
@@ -706,7 +706,7 @@ impl GritApp {
             if !conflicts.is_empty() {
                 egui::Frame::new()
                     .fill(theme_color([57,40,34],[255,239,220]))
-                    .stroke(Stroke::new(1., Color32::from_rgb(145, 94, 58)))
+                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(145, 94, 58)))
                     .corner_radius(8)
                     .inner_margin(8.)
                     .show(ui, |ui| {
@@ -789,7 +789,7 @@ impl GritApp {
         if let Some((path, content)) = &mut self.conflict_draft {
             egui::Frame::new()
                 .fill(panel())
-                .stroke(Stroke::new(1., border()))
+                .stroke(Stroke::new(1.0_f32, border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {
@@ -843,7 +843,7 @@ impl GritApp {
         if let Some((path, patch)) = &mut self.patch_draft {
             egui::Frame::new()
                 .fill(panel())
-                .stroke(Stroke::new(1., border()))
+                .stroke(Stroke::new(1.0_f32, border()))
                 .corner_radius(8)
                 .inner_margin(8.)
                 .show(ui, |ui| {

@@ -35,7 +35,10 @@ jobs:
             arch: x86_64
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.100.0
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.100.0
       - name: Install Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |

@@ -726,7 +726,7 @@ fn validate_custom_font_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if table_count == 0 || directory_end > bytes.len() {
         return Err("Font file has a truncated table directory".into());
     }
-    for table in bytes[12..directory_end].chunks_exact(16) {
+    for table in bytes[12..directory_end].as_chunks::<16>().0 {
         let offset = u32::from_be_bytes([table[8], table[9], table[10], table[11]]) as usize;
         let length = u32::from_be_bytes([table[12], table[13], table[14], table[15]]) as usize;
         if offset

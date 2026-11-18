@@ -14,12 +14,14 @@ pub struct WindowTools {
 
 pub enum InstanceStartup {
     Primary(InstanceHandle),
+    #[cfg(unix)]
     Forwarded,
     Unavailable(String),
     /// Explicit `--new-window` bypass; this window does not own the IPC endpoint.
     Bypassed,
 }
 
+#[cfg(unix)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InstanceMessage {
     Open(PathBuf),
@@ -42,12 +44,6 @@ impl InstanceHandle {
     #[cfg(unix)]
     pub fn try_recv(&self) -> Option<InstanceMessage> {
         self.receiver.try_recv().ok()
-    }
-
-    /// Non-Unix builds intentionally provide no single-instance guarantee.
-    #[cfg(not(unix))]
-    pub fn try_recv(&self) -> Option<InstanceMessage> {
-        None
     }
 
     pub fn platform_note(&self) -> Option<&'static str> {
