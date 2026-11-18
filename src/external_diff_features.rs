@@ -539,12 +539,15 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    #[cfg(unix)]
     struct TestRepo(PathBuf);
+    #[cfg(unix)]
     impl TestRepo {
         fn new(name: &str) -> Self {
             let p = std::env::temp_dir().join(format!(
@@ -588,6 +591,7 @@ mod tests {
                 .unwrap()
         }
     }
+    #[cfg(unix)]
     impl Drop for TestRepo {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
