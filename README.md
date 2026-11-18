@@ -78,6 +78,8 @@ For broad distro compatibility, build the AppImage on Ubuntu 22.04 or use the Li
 
 The GitHub Actions workflow builds on Windows, Linux, Apple Silicon macOS, and Intel macOS for each pull request, main branch update, and version tag. Its downloadable artifacts include a portable Windows ZIP, a macOS `.app` bundle ZIP for each architecture, and the `grit-linux-AppImage-x86_64` AppImage. The CI macOS bundle is not code signed, so macOS may ask you to confirm the first launch.
 
+A successful push build on `main` publishes the four desktop packages under [GitHub Releases](https://github.com/trashcoder/grit/releases) as a prerelease tagged `dev.<workflow-run-number>`. A successful version-tag build such as `v0.1.0` publishes a stable release marked **Latest**. Version tags with a hyphen, such as `v0.1.0-rc.1`, also publish as prereleases.
+
 ## Current scope
 
 Remote authentication uses Git's configured credential helpers and SSH agent through the system `git` executable. Pull uses fast-forward-only mode. Conflict files can be resolved from the Changes view by choosing either side or editing the file in grit. Interactive rebase plans require a clean working tree and currently exclude merge commits.
